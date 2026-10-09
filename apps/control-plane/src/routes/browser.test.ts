@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRoutes } from "./browser.js";
 import type { EnvironmentService } from "../services/environments.js";
+import { mintUiToken } from "../ui-tokens.js";
 
 describe("browser workspace ownership", () => {
   const make = () => {
@@ -10,6 +11,8 @@ describe("browser workspace ownership", () => {
       get: vi.fn(async (userId: string, id: string) =>
         userId === id ? { id } : null,
       ),
+      listProjects: vi.fn((userId: string, id: string) => [{ userId, id }]),
+      createProject: vi.fn(async () => ({ id: "project" })),
     };
     return {
       service,
@@ -61,5 +64,26 @@ describe("browser workspace ownership", () => {
         .status,
     ).toBe(202);
     expect(service.create).toHaveBeenCalledOnce();
+  });
+  it("scopes CLI chat tokens to project management in their own sandbox", async () => {
+    const { app, service } = make();
+    const { token } = mintUiToken({ userId: "owner", environmentId: "workspace", piSessionId: "pi", secret: "test-secret" });
+    const headers = { authorization: `Bearer ${token}` };
+    const own = await app.request("http://localhost/environments/workspace/projects", { headers });
+    expect(own.status).toBe(200);
+    expect(service.listProjects).toHaveBeenCalledWith("owner", "workspace");
+    expect((await app.request("http://localhost/environments/other/projects", { headers })).status).toBe(403);
+    expect((await app.request("http://localhost/environments", { headers })).status).toBe(403);
+    expect((await app.request("http://localhost/environments/workspace", { headers })).status).toBe(403);
+  });
+  it("applies the same GitHub-only and origin checks to additional projects", async () => {
+    const { app, service } = make();
+    const request = (origin: string, repoUrl: string) => app.request("http://localhost/environments/workspace/projects", {
+      method: "POST", headers: { origin, host: "localhost", "content-type": "application/json" }, body: JSON.stringify({ repoUrl }),
+    });
+    expect((await request("http://localhost", "http://127.0.0.1/private")).status).toBe(400);
+    expect((await request("https://attacker.com", "https://github.com/owner/repo")).status).toBe(403);
+    expect(service.createProject).not.toHaveBeenCalled();
+    expect((await request("http://localhost", "https://github.com/owner/repo")).status).toBe(202);
   });
 });

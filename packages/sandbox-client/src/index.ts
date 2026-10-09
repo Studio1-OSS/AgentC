@@ -6,7 +6,9 @@ import {
 import {
   DEFAULT_PI_AGENT_DIR,
   DEFAULT_RUNTIME_PORT,
+  DEFAULT_WEB_PREVIEW_PORT,
   DEFAULT_WORKSPACE_PATH,
+  webPreviewConfigPath,
 } from "@cloud-agent/protocol";
 import { readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -162,12 +164,12 @@ export class SandboxClient {
     );
   }
 
-  async initEmptyWorkspace(sandbox: Sandbox): Promise<void> {
+  async initEmptyWorkspace(sandbox: Sandbox, path = this.workspacePath): Promise<void> {
     await this.ensureWorkspace(sandbox);
     await sandbox.process.executeCommand(
       [
-        `mkdir -p "${this.workspacePath}"`,
-        `cd "${this.workspacePath}"`,
+        `mkdir -p ${shellQuote(path)}`,
+        `cd ${shellQuote(path)}`,
         `if [ ! -d .git ]; then git init -b main; fi`,
         `if [ ! -f README.md ]; then echo "# Workspace" > README.md; fi`,
       ].join(" && "),
@@ -238,6 +240,18 @@ export class SandboxClient {
     });
 
     await this.waitForRuntimeHealthy(sandbox, 90_000);
+    await this.configureWebPreview(sandbox);
+  }
+
+  async configureWebPreview(sandbox: Sandbox, port = DEFAULT_WEB_PREVIEW_PORT): Promise<void> {
+    const preview = await this.getSignedPreview(sandbox, port, 86400);
+    await sandbox.fs.createFolder("/home/daytona/.cloud-agent", "700");
+    if (port !== DEFAULT_WEB_PREVIEW_PORT) await sandbox.fs.createFolder("/home/daytona/.cloud-agent/previews", "700");
+    await sandbox.fs.uploadFile(Buffer.from(JSON.stringify({
+      url: preview.url,
+      port: preview.port,
+      expiresAt: new Date(Date.now() + 86400_000).toISOString(),
+    })), webPreviewConfigPath(port));
   }
 
   async waitForRuntimeHealthy(sandbox: Sandbox, timeoutMs = 60_000): Promise<void> {
@@ -301,7 +315,11 @@ export class SandboxClient {
     }
 
     const { runtimeAccessToken: _, ...rest } = init;
-    return fetch(url, { ...rest, headers });
+    return fetch(url, {
+      ...rest,
+      headers,
+      signal: rest.signal ?? AbortSignal.timeout(20_000),
+    });
   }
 
   /**
@@ -310,7 +328,7 @@ export class SandboxClient {
    */
   async connectRuntimeSessionWs(
     sandbox: Sandbox,
-    options: { piSessionId: string; runtimeAccessToken: string },
+    options: { piSessionId: string; runtimeAccessToken: string; projectId?: string; previewPort?: number },
   ): Promise<WebSocket> {
     const preview = await sandbox.getPreviewLink(this.runtimePort);
     const httpBase = preview.url.endsWith("/") ? preview.url : `${preview.url}/`;
@@ -320,13 +338,21 @@ export class SandboxClient {
       wsBase,
     );
     url.searchParams.set("token", options.runtimeAccessToken);
+    if (options.projectId) url.searchParams.set("projectId", options.projectId);
+    if (options.previewPort) url.searchParams.set("previewPort", String(options.previewPort));
 
     return await new Promise<WebSocket>((resolve, reject) => {
       const ws = new WebSocket(url, {
+        handshakeTimeout: 15_000,
         headers: {
           "x-daytona-preview-token": preview.token,
         },
       });
+      const timer = setTimeout(() => {
+        cleanup();
+        ws.terminate();
+        reject(new Error("Runtime WebSocket timed out"));
+      }, 20_000);
       const onError = (err: Error) => {
         cleanup();
         reject(err);
@@ -336,6 +362,7 @@ export class SandboxClient {
         resolve(ws);
       };
       const cleanup = () => {
+        clearTimeout(timer);
         ws.off("open", onOpen);
         ws.off("error", onError);
       };

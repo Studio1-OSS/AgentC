@@ -1,9 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { ProjectIdSchema } from "@cloud-agent/protocol";
 
 export type UiTokenPayload = {
   userId: string;
   environmentId: string;
   piSessionId: string;
+  projectId?: string;
   exp: number;
 };
 
@@ -51,6 +53,7 @@ export function verifyUiToken(
       return null;
     }
     if (Date.now() > payload.exp) return null;
+    if (payload.projectId !== undefined && !ProjectIdSchema.safeParse(payload.projectId).success) return null;
     return payload;
   } catch {
     return null;
@@ -61,6 +64,7 @@ export function mintUiToken(args: {
   userId: string;
   environmentId: string;
   piSessionId: string;
+  projectId?: string;
   secret: string;
   ttlMs?: number;
 }): { token: string; expiresAt: string } {
@@ -71,6 +75,7 @@ export function mintUiToken(args: {
       userId: args.userId,
       environmentId: args.environmentId,
       piSessionId: args.piSessionId,
+      projectId: args.projectId,
       exp,
     },
     args.secret,

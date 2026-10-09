@@ -14,10 +14,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { mkdirSync } from "node:fs";
 import { mapPiEvent } from "./events.js";
+import { createPreviewTool } from "./preview.js";
 
 export type RuntimeConfig = {
   cwd: string;
   agentDir: string;
+  previewPort?: number;
   /** Optional override; when omitted, resolved from process env / keys below. */
   llm?: LlmProviderConfig;
   provider?: string;
@@ -34,6 +36,8 @@ type ActiveSession = {
   session: AgentSession;
   listeners: Set<(event: ServerEvent) => void>;
   unsubscribe?: () => void;
+  prompting?: boolean;
+  createdAt: string;
 };
 
 /**
@@ -43,6 +47,7 @@ type ActiveSession = {
  */
 export class PiSessionRegistry {
   private readonly active = new Map<string, ActiveSession>();
+  private readonly opening = new Map<string, Promise<{ id: string }>>();
   private modelRuntimePromise: Promise<ModelRuntime> | null = null;
 
   constructor(private readonly config: RuntimeConfig) {
@@ -127,7 +132,7 @@ export class PiSessionRegistry {
 
   async listSessions() {
     const sessions = await SessionManager.list(this.config.cwd);
-    return sessions.map((s) => ({
+    const listed = sessions.map((s) => ({
       id: s.id,
       path: s.path,
       title: s.name ?? (s.firstMessage ? truncate(s.firstMessage, 80) : null),
@@ -135,7 +140,17 @@ export class PiSessionRegistry {
       modifiedAt: s.modified.toISOString(),
       messageCount: s.messageCount,
       firstMessage: s.firstMessage,
+      running: this.active.has(s.id) && this.isRunning(s.id),
     }));
+    for (const [id, entry] of this.active) {
+      if (listed.some((session) => session.id === id)) continue;
+      listed.push({
+        id, path: entry.session.sessionFile ?? "", title: entry.session.sessionName ?? null,
+        createdAt: entry.createdAt, modifiedAt: entry.createdAt,
+        messageCount: entry.session.messages.length, firstMessage: "", running: this.isRunning(id),
+      });
+    }
+    return listed;
   }
 
   async createSession(title?: string): Promise<{ id: string }> {
@@ -147,6 +162,7 @@ export class PiSessionRegistry {
       agentDir: this.config.agentDir,
       modelRuntime,
       model,
+      customTools: [createPreviewTool(this.config.previewPort)],
       sessionManager: SessionManager.create(this.config.cwd),
     });
 
@@ -168,7 +184,18 @@ export class PiSessionRegistry {
   async openSession(sessionId: string): Promise<{ id: string }> {
     const existing = this.active.get(sessionId);
     if (existing) return { id: sessionId };
+    const pending = this.opening.get(sessionId);
+    if (pending) return pending;
+    const loading = this.loadSession(sessionId);
+    this.opening.set(sessionId, loading);
+    try {
+      return await loading;
+    } finally {
+      this.opening.delete(sessionId);
+    }
+  }
 
+  private async loadSession(sessionId: string): Promise<{ id: string }> {
     const sessions = await SessionManager.list(this.config.cwd);
     const match = sessions.find((s) => s.id === sessionId);
     if (!match) {
@@ -183,6 +210,7 @@ export class PiSessionRegistry {
       agentDir: this.config.agentDir,
       modelRuntime,
       model,
+      customTools: [createPreviewTool(this.config.previewPort)],
       sessionManager: SessionManager.open(match.path),
     });
 
@@ -211,6 +239,10 @@ export class PiSessionRegistry {
 
   async prompt(sessionId: string, content: string): Promise<void> {
     const entry = this.getOrThrow(sessionId);
+    if (entry.prompting || !entry.session.isIdle) {
+      throw new Error("The agent is still replying. Wait for it to finish or stop the current reply.");
+    }
+    entry.prompting = true;
     this.emit(entry, { type: "run.start" });
     try {
       await entry.session.prompt(content);
@@ -222,17 +254,20 @@ export class PiSessionRegistry {
       });
       throw err;
     } finally {
+      entry.prompting = false;
       this.emit(entry, { type: "run.end" });
     }
   }
 
   async steer(sessionId: string, content: string): Promise<void> {
     const entry = this.getOrThrow(sessionId);
+    if (!this.isRunning(sessionId)) return this.prompt(sessionId, content);
     await entry.session.steer(content);
   }
 
   async followUp(sessionId: string, content: string): Promise<void> {
     const entry = this.getOrThrow(sessionId);
+    if (!this.isRunning(sessionId)) return this.prompt(sessionId, content);
     await entry.session.followUp(content);
   }
 
@@ -244,6 +279,23 @@ export class PiSessionRegistry {
   getMessages(sessionId: string) {
     const entry = this.getOrThrow(sessionId);
     return entry.session.messages;
+  }
+
+  isRunning(sessionId: string): boolean {
+    const entry = this.getOrThrow(sessionId);
+    return Boolean(entry.prompting || !entry.session.isIdle);
+  }
+
+  getState(sessionId: string): ServerEvent {
+    const entry = this.getOrThrow(sessionId);
+    return {
+      type: "session.state",
+      sessionId,
+      messageCount: entry.session.messages.length,
+      messages: entry.session.messages,
+      running: this.isRunning(sessionId),
+      streamingMessage: entry.session.agent.state.streamingMessage,
+    };
   }
 
   disposeSession(sessionId: string): void {
@@ -265,10 +317,12 @@ export class PiSessionRegistry {
     const entry: ActiveSession = {
       session,
       listeners: new Set(),
+      createdAt: new Date().toISOString(),
     };
 
     entry.unsubscribe = session.subscribe((event) => {
       for (const mapped of mapPiEvent(event)) {
+        if (mapped.type === "run.end" && entry.prompting) continue;
         this.emit(entry, mapped);
       }
     });

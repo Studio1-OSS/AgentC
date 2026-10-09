@@ -54,9 +54,14 @@ export type CreateEnvironmentRequest = z.infer<
   typeof CreateEnvironmentRequestSchema
 >;
 
+export const ProjectIdSchema = z.union([z.literal("default"), z.string().uuid()]);
+export const SessionRequestSchema = z.object({ title: z.string().trim().min(1).max(120).optional() });
+export const OpenProjectChatSchema = z.object({ sessionId: z.string().uuid().optional() });
+
 export const SessionRefSchema = z.object({
   id: z.string(),
   environmentId: z.string(),
+  projectId: z.string().nullable().optional(),
   piSessionId: z.string(),
   title: z.string().nullable(),
   createdAt: z.string(),
@@ -84,6 +89,9 @@ export const ClientWsMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("ping"),
   }),
+  z.object({
+    type: z.literal("sync"),
+  }),
 ]);
 export type ClientWsMessage = z.infer<typeof ClientWsMessageSchema>;
 
@@ -94,6 +102,9 @@ export const ServerEventSchema = z.discriminatedUnion("type", [
     sessionId: z.string(),
     title: z.string().nullable().optional(),
     messageCount: z.number().optional(),
+    running: z.boolean().optional(),
+    messages: z.array(z.unknown()).optional(),
+    streamingMessage: z.unknown().optional(),
   }),
   z.object({
     type: z.literal("message.start"),
@@ -148,6 +159,7 @@ export const ServerEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("pong"),
+    running: z.boolean().optional(),
   }),
 ]);
 export type ServerEvent = z.infer<typeof ServerEventSchema>;
@@ -185,5 +197,15 @@ export type PreviewResponse = z.infer<typeof PreviewResponseSchema>;
 
 /** Default ports. */
 export const DEFAULT_RUNTIME_PORT = 4096;
+export const DEFAULT_WEB_PREVIEW_PORT = 3000;
+export const WEB_PREVIEW_CONFIG_PATH = "/home/daytona/.cloud-agent/preview.json";
+export function webPreviewConfigPath(port = DEFAULT_WEB_PREVIEW_PORT): string {
+  return port === DEFAULT_WEB_PREVIEW_PORT ? WEB_PREVIEW_CONFIG_PATH : `/home/daytona/.cloud-agent/previews/${port}.json`;
+}
+export const WebPreviewSchema = z.object({
+  url: z.string().url(),
+  port: z.number().int().min(1).max(65535),
+  expiresAt: z.string().datetime(),
+});
 export const DEFAULT_WORKSPACE_PATH = "/home/daytona/workspace/project";
 export const DEFAULT_PI_AGENT_DIR = "/home/daytona/.pi/agent";

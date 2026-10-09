@@ -87,6 +87,16 @@ export function applyChatEvent(
     .map((i) => i.kind === "assistant" && !!i.streaming)
     .lastIndexOf(true);
   switch (event.type) {
+    case "session.state": {
+      if (!Array.isArray(event.messages)) return items;
+      const restored = historyItems(event.messages as RuntimeMessage[]);
+      const streaming = event.streamingMessage as RuntimeMessage | undefined;
+      if (streaming?.role === "assistant") {
+        const partial = historyItems([streaming]);
+        restored.push(...partial.map((item) => item.kind === "assistant" ? { ...item, streaming: true } : item));
+      }
+      return restored;
+    }
     case "message.start":
       return event.role === "assistant"
         ? [...items, { id: id(), kind: "assistant", text: "", streaming: true }]

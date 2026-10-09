@@ -51,6 +51,7 @@ async function handleUpgrade(
       payload.userId,
       payload.environmentId,
       payload.piSessionId,
+      payload.projectId,
     );
 
     wss.handleUpgrade(req, socket, head, (client) => {

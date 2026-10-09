@@ -3,6 +3,10 @@ import { mapPiEvent } from "./events.js";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 const map = (event: unknown) => mapPiEvent(event as AgentSessionEvent);
 describe("Pi events", () => {
+  it("keeps the run active across attempts and ends only when Pi settles", () => {
+    expect(map({ type: "agent_end", messages: [], willRetry: true })).toEqual([]);
+    expect(map({ type: "agent_settled" })).toEqual([{ type: "run.end" }]);
+  });
   it("surfaces model failures rather than leaving a silent blank reply", () => {
     expect(
       map({

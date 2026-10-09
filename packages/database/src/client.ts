@@ -56,7 +56,26 @@ export function migrateDatabase(sqlite: Database.Database): void {
       last_active_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY NOT NULL,
+      environment_id TEXT NOT NULL REFERENCES environments(id),
+      name TEXT NOT NULL,
+      repo_url TEXT,
+      repo_branch TEXT,
+      path TEXT NOT NULL,
+      preview_port INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(environment_id, preview_port)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_environments_user_id ON environments(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_environment_id ON sessions(environment_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_environment_id ON projects(environment_id);
   `);
+  const columns = sqlite.pragma("table_info(sessions)") as { name: string }[];
+  if (!columns.some((column) => column.name === "project_id")) {
+    sqlite.exec("ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)");
+  }
 }

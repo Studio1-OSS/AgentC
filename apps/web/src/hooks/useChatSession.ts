@@ -1,135 +1,172 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  CHAT_RECONNECT_GIVE_UP,
+  chatReconnectDelay,
   type Bootstrap,
   type ChatItem,
   fetchBootstrap,
   wsUrlForToken,
 } from "@/lib/session";
-
 import { applyChatEvent, historyItems } from "@/lib/chat-events";
 
 type ConnState = "connecting" | "ready" | "error" | "closed";
 
-let idCounter = 0;
-function nextId(prefix: string) {
-  idCounter += 1;
-  return `${prefix}-${idCounter}`;
-}
-
-export function useChatSession(token: string | null) {
+export function useChatSession(
+  token: string | null,
+  hooks?: { onGiveUp?: () => void; onToken?: (token: string) => void },
+) {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [items, setItems] = useState<ChatItem[]>([]);
   const [conn, setConn] = useState<ConnState>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const busyRef = useRef(false);
+  const readyRef = useRef(false);
+  const onGiveUpRef = useRef(hooks?.onGiveUp);
+  const onTokenRef = useRef(hooks?.onToken);
+  onGiveUpRef.current = hooks?.onGiveUp;
+  onTokenRef.current = hooks?.onToken;
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
 
   useEffect(() => {
     if (!token) {
-      setError("Missing chat token. Open a link from `cloud-agent open`.");
+      setError("Missing chat token. Open a workspace to connect.");
       setConn("error");
       return;
     }
-
     setConn("connecting");
     setError(null);
     setItems([]);
     setBootstrap(null);
     setBusy(false);
+    busyRef.current = false;
+    readyRef.current = false;
     let cancelled = false;
+    let bootstrapped = false;
+    let retries = 0;
     let ws: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let connectionTimer: ReturnType<typeof setTimeout> | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
 
-    (async () => {
+    const updateBusy = (running: boolean) => {
+      busyRef.current = running;
+      setBusy(running);
+    };
+    const retry = () => {
+      if (cancelled) return;
+      readyRef.current = false;
+      if (retries === CHAT_RECONNECT_GIVE_UP) {
+        setConn("closed");
+        setError("Connection lost. Reconnect to restore the conversation.");
+        onGiveUpRef.current?.();
+      } else if (retries < CHAT_RECONNECT_GIVE_UP) {
+        setConn("connecting");
+      }
+      retryTimer = setTimeout(() => void connect(), chatReconnectDelay(retries++));
+    };
+    const connect = async () => {
       try {
-        const boot = await fetchBootstrap(token);
-        if (cancelled) return;
-        setBootstrap(boot);
-        setItems(historyItems(boot.messages ?? []));
-
-        ws = new WebSocket(wsUrlForToken(token));
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-          if (!cancelled) setConn("ready");
-        };
-
-        ws.onmessage = (evt) => {
+        if (!bootstrapped) {
+          const boot = await fetchBootstrap(token);
           if (cancelled) return;
+          if (boot.token && boot.token !== token) {
+            onTokenRef.current?.(boot.token);
+            return;
+          }
+          setBootstrap(boot);
+          setItems(historyItems(boot.messages ?? []));
+          bootstrapped = true;
+        }
+        if (cancelled) return;
+        const socket = new WebSocket(wsUrlForToken(token));
+        ws = socket;
+        wsRef.current = socket;
+        let lastReceived = Date.now();
+        connectionTimer = setTimeout(() => socket.close(), 20_000);
+        socket.onopen = () => {
+          if (cancelled) return;
+          socket.send(JSON.stringify({ type: "sync" }));
+          heartbeat = setInterval(() => {
+            if (Date.now() - lastReceived > 45_000) {
+              socket.close();
+            } else if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: "ping" }));
+            }
+          }, 15_000);
+        };
+        socket.onmessage = (evt) => {
+          if (cancelled) return;
+          lastReceived = Date.now();
           let data: Record<string, unknown>;
           try {
             data = JSON.parse(String(evt.data)) as Record<string, unknown>;
           } catch {
             return;
           }
-          const type = String(data.type ?? "");
-
-          if (type === "session.state") {
-            setItems((prev) => [
-              ...prev,
-              {
-                id: nextId("sys"),
-                kind: "system",
-                text: "Connected to Pi session",
-              },
-            ]);
+          if (data.type === "session.state") {
+            clearTimeout(connectionTimer);
+            retries = 0;
+            if (!readyRef.current) setError(null);
+            readyRef.current = true;
+            setConn("ready");
+            updateBusy(Boolean(data.running));
+          } else if (data.type === "run.start") {
+            updateBusy(true);
+          } else if (data.type === "run.end") {
+            updateBusy(false);
+          } else if (data.type === "pong") {
+            if (typeof data.running === "boolean") {
+              updateBusy(data.running);
+              if (!data.running) setItems((prev) => applyChatEvent(prev, { type: "run.end" }));
+            }
             return;
-          }
-
-          if (type === "run.start") {
-            setBusy(true);
-            return;
-          }
-
-          if (type === "run.end") setBusy(false);
-          setItems((prev) => applyChatEvent(prev, data));
-
-          if (type === "error") {
+          } else if (data.type === "error") {
             setError(String(data.message ?? "Unknown error"));
-            setBusy(false);
           }
+          setItems((prev) => applyChatEvent(prev, data));
         };
-
-        ws.onerror = () => {
-          if (!cancelled) {
-            setConn("error");
-            setError("WebSocket connection failed");
-          }
-        };
-
-        ws.onclose = () => {
-          if (!cancelled) {
-            setConn("closed");
-            setBusy(false);
-          }
+        socket.onerror = () => socket.close();
+        socket.onclose = () => {
+          clearTimeout(connectionTimer);
+          clearInterval(heartbeat);
+          if (wsRef.current === socket) wsRef.current = null;
+          bootstrapped = false;
+          retry();
         };
       } catch (err) {
-        if (!cancelled) {
-          setConn("error");
-          setError(err instanceof Error ? err.message : String(err));
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+        if (message === "Unable to load conversation" || message === "Unable to open the agent conversation") {
+          onGiveUpRef.current?.();
+          return;
         }
+        retry();
       }
-    })();
-
+    };
+    void connect();
     return () => {
       cancelled = true;
+      clearTimeout(retryTimer);
+      clearTimeout(connectionTimer);
+      clearInterval(heartbeat);
       ws?.close();
       wsRef.current = null;
+      readyRef.current = false;
     };
-  }, [token]);
+  }, [token, connectionAttempt]);
 
   const sendPrompt = useCallback((content: string) => {
     const text = content.trim();
-    if (
-      !text ||
-      !wsRef.current ||
-      wsRef.current.readyState !== WebSocket.OPEN
-    ) {
-      return;
-    }
-    setItems((prev) => [...prev, { id: nextId("u"), kind: "user", text }]);
+    const socket = wsRef.current;
+    if (!text || busyRef.current || !readyRef.current || socket?.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: "prompt", content: text }));
+    busyRef.current = true;
+    setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: "user", text }]);
     setError(null);
     setBusy(true);
-    wsRef.current.send(JSON.stringify({ type: "prompt", content: text }));
   }, []);
 
   const abort = useCallback(() => {
@@ -137,6 +174,10 @@ export function useChatSession(token: string | null) {
       wsRef.current.send(JSON.stringify({ type: "abort" }));
     }
   }, []);
+  const reconnect = useCallback(() => {
+    if (onGiveUpRef.current) onGiveUpRef.current();
+    else setConnectionAttempt((attempt) => attempt + 1);
+  }, []);
 
-  return { bootstrap, items, conn, error, busy, sendPrompt, abort };
+  return { bootstrap, items, conn, error, busy, sendPrompt, abort, reconnect };
 }

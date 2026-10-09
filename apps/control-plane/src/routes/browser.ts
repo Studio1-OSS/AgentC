@@ -4,6 +4,8 @@ import { getSignedCookie, setSignedCookie } from "hono/cookie";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthVariables } from "../middleware/auth.js";
 import type { EnvironmentService } from "../services/environments.js";
+import { createProjectRoutes, requirePublicGitHubRepo } from "./projects.js";
+import { verifyUiToken } from "../ui-tokens.js";
 
 /** Guest workspaces belong to a signed browser cookie, never a client-supplied user ID. */
 export function createBrowserRoutes(
@@ -19,6 +21,16 @@ export function createBrowserRoutes(
       if (!origin || new URL(origin).host !== c.req.header("host")) {
         return c.json({ error: "Request must come from this website" }, 403);
       }
+    }
+    const authorization = c.req.header("authorization");
+    if (authorization) {
+      const payload = authorization.startsWith("Bearer ") ? verifyUiToken(authorization.slice(7), secret) : null;
+      const match = c.req.path.match(/^(?:\/ui\/api)?\/environments\/([^/]+)\/projects(?:\/|$)/);
+      if (!payload || match?.[1] !== payload.environmentId) {
+        return c.json({ error: "Chat token cannot access this workspace" }, 403);
+      }
+      c.set("userId", payload.userId);
+      return next();
     }
     let userId = await getSignedCookie(c, secret, "cloud_agent_guest");
     if (!userId) {
@@ -37,32 +49,13 @@ export function createBrowserRoutes(
     await next();
   });
   app.onError((err, c) => c.json({ error: err.message }, 400));
+  app.route("/environments", createProjectRoutes(service, true));
   app.get("/environments", async (c) =>
     c.json({ environments: await service.list(c.get("userId")) }),
   );
   app.post("/environments", async (c) => {
     const body = await c.req.json();
-    if (body.repoUrl) {
-      const url = new URL(body.repoUrl);
-      if (
-        url.protocol !== "https:" ||
-        url.hostname !== "github.com" ||
-        url.port ||
-        url.username ||
-        url.password ||
-        !/^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname) ||
-        url.search ||
-        url.hash
-      ) {
-        return c.json(
-          {
-            error:
-              "Enter a public GitHub repository URL, like https://github.com/owner/repo",
-          },
-          400,
-        );
-      }
-    }
+    if (body.repoUrl) requirePublicGitHubRepo(body.repoUrl);
     const envs = await service.list(c.get("userId"));
     if (envs.length >= 5)
       return c.json(

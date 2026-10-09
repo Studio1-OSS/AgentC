@@ -3,6 +3,31 @@ import { applyChatEvent, historyItems } from "./chat-events";
 import type { ChatItem } from "./session";
 
 describe("agent transcript", () => {
+  it("restores missed history and a partial reply without appending duplicates on sync", () => {
+    const state = {
+      type: "session.state",
+      running: true,
+      messages: [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: [{ type: "text", text: "Earlier reply" }] },
+      ],
+      streamingMessage: { role: "assistant", content: [{ type: "text", text: "Still writing" }] },
+    };
+    let items = applyChatEvent([], state);
+    items = applyChatEvent(items, state);
+    expect(items).toHaveLength(3);
+    expect(items[2]).toMatchObject({ text: "Still writing", streaming: true });
+    items = applyChatEvent(items, { type: "message.delta", text: "…" });
+    expect(items[2]).toMatchObject({ text: "Still writing…" });
+    items = applyChatEvent(items, {
+      type: "session.state",
+      running: false,
+      messages: [...state.messages, { role: "assistant", content: [{ type: "text", text: "Finished while disconnected" }] }],
+    });
+    expect(items).toHaveLength(3);
+    expect(items[2]).toMatchObject({ text: "Finished while disconnected" });
+    expect(items.some((item) => item.kind === "assistant" && item.streaming)).toBe(false);
+  });
   it("preserves repeated deltas and replaces them with the exact final snapshot", () => {
     let items: ChatItem[] = applyChatEvent([], {
       type: "message.start",

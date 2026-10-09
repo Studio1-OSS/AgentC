@@ -93,7 +93,6 @@ export function mapPiEvent(event: AgentSessionEvent): ServerEvent[] {
     case "agent_start":
       return [{ type: "run.start" }];
     case "agent_settled":
-    case "agent_end":
       return [{ type: "run.end" }];
     case "compaction_end":
       return [

@@ -57,7 +57,13 @@ Open **http://127.0.0.1:8787/**. Paste a public GitHub URL (or `owner/repo`), op
 
 Agent replies render Markdown with highlighted code and copying, tables, task lists, links, and images. Tool cards show arguments, streamed output, errors, and edit diffs; reasoning is collapsible.
 
-The dashboard lists this browser's workspaces with open, stop, resume, and delete actions. Returning to a workspace resumes its latest Pi conversation, including the transcript. No CLI, API key entry, or token link is needed.
+Every new or resumed sandbox gets a [Daytona signed web preview](https://www.daytona.io/docs/en/preview/) for port **3000**; ngrok and extra tunnel credentials are unnecessary. The agent is instructed to run web apps in the background on `0.0.0.0:3000`, call its `preview` tool to check server readiness and the preview hostname, and share the resulting HTTPS link. Successful preview tool cards also have an **Open preview** link. Vite apps must allow the preview proxy domain. Links last 24 hours and are refreshed when you reopen the chat or resume the sandbox; the app server must keep running for a preview to work. Sandbox control ports remain private.
+
+Chat reconnects automatically after connection loss and restores both the transcript and any reply in progress. The running indicator stays active through provider retries until Pi finishes. If reconnect attempts fail, use **Reconnect**; **Stop** remains available during a connected active run.
+
+The dashboard lists this browser's workspaces with open, stop, resume, and delete actions. Returning to a workspace resumes its most recently opened conversation, including the transcript. No CLI, API key entry, or token link is needed.
+
+Inside a workspace, use **New project** to add a public GitHub repository or an empty project to the existing sandbox. The **Project** picker switches between them. Each project has its own working directory, conversation history, and web preview port; the original project and its existing sessions stay in place. Use **New chat** to start a fresh conversation within a project, and the **Conversation** picker to reopen previous chats. Switching conversations leaves active replies running. Projects share sandbox compute and filesystem access, and stopping the sandbox stops all of them. After deploying this update, stop/resume an older workspace once to enable project management in its runtime.
 
 Guest ownership uses a signed HttpOnly cookie lasting 30 days. Clearing cookies loses access to those workspaces; this version does not provide account login or cross-device access. A guest can keep up to five workspaces. This is a browser guest MVP; account authentication and deployment-wide usage limits are still needed for an unrestricted public service.
 
@@ -103,11 +109,17 @@ Auth (API): `Authorization: Bearer <CONTROL_PLANE_API_KEY>` and optional `X-User
 | GET      | `/environments`                             | List environments                            |
 | POST     | `/environments`                             | Create                                       |
 | POST     | `/environments/:id/ui`                      | Mint browser chat link                       |
+| GET/POST | `/environments/:id/projects`                | List/add projects in one sandbox             |
+| GET/POST | `/environments/:id/projects/:projectId/sessions` | List/start project conversations         |
+| POST     | `/environments/:id/projects/:projectId/chat` | Resume a project or chosen conversation      |
 | POST     | `/environments/:id/start`                   | Start sleeping sandbox                       |
 | POST     | `/environments/:id/stop`                    | Stop sandbox                                 |
 | DELETE   | `/environments/:id`                         | Delete                                       |
 | GET/POST | `/ui/api/environments`                      | Browser workspace list/create (guest cookie) |
 | POST     | `/ui/api/environments/:id/chat`             | Resume agent conversation (guest cookie)     |
+| GET/POST | `/ui/api/environments/:id/projects`         | Browser project list/create                  |
+| GET/POST | `/ui/api/environments/:id/projects/:projectId/sessions` | Browser conversation list/create    |
+| POST     | `/ui/api/environments/:id/projects/:projectId/chat` | Browser conversation switch            |
 | POST     | `/ui/api/environments/:id/start` or `/stop` | Browser sandbox lifecycle                    |
 | DELETE   | `/ui/api/environments/:id`                  | Delete browser workspace                     |
 | GET      | `/ui/api/bootstrap?t=`                      | Chat UI bootstrap (UI token)                 |

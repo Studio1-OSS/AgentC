@@ -1,9 +1,11 @@
 import { Hono } from "hono";
 import type { EnvironmentService } from "../services/environments.js";
 import type { AuthVariables } from "../middleware/auth.js";
+import { createProjectRoutes } from "./projects.js";
 
 export function createEnvironmentRoutes(service: EnvironmentService) {
   const app = new Hono<{ Variables: AuthVariables }>();
+  app.route("/", createProjectRoutes(service));
 
   app.get("/", async (c) => {
     const userId = c.get("userId");

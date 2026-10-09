@@ -20,6 +20,7 @@ type Props = {
   busy: boolean;
   onSend: (text: string) => void;
   onAbort: () => void;
+  reconnect: () => void;
 };
 
 export function Chat({
@@ -30,6 +31,7 @@ export function Chat({
   busy,
   onSend,
   onAbort,
+  reconnect,
 }: Props) {
   const [draft, setDraft] = useState("");
   const followRef = useRef(true);
@@ -49,14 +51,14 @@ export function Chat({
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 py-5 sm:px-6">
+    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 py-5 sm:px-6">
       <header className="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
         <div className="min-w-0">
           <p className="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase">
             Cloud Agent
           </p>
           <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-ink">
-            {bootstrap?.environmentName ?? "Session"}
+            {bootstrap?.projectName ?? bootstrap?.environmentName ?? "Session"}
           </h1>
           <p className="mt-1 truncate font-mono text-xs text-ink-soft">
             {bootstrap
@@ -98,6 +100,12 @@ export function Chat({
         </p>
       )}
 
+      {(conn === "closed" || conn === "error") && (
+        <button type="button" onClick={reconnect} className="mb-3 text-sm font-medium text-accent">
+          Reconnect
+        </button>
+      )}
+
       <form
         onSubmit={submit}
         className="rounded-2xl border border-line bg-paper-elevated shadow-[0_12px_40px_-24px_rgba(26,29,33,0.45)]"
@@ -123,7 +131,7 @@ export function Chat({
           <span className="font-mono text-[11px] text-ink-soft">
             Enter to send · Shift+Enter for newline
           </span>
-          {busy ? (
+          {busy && conn === "ready" ? (
             <button
               type="button"
               onClick={onAbort}
@@ -196,6 +204,11 @@ function Row({ item }: { item: ChatItem }) {
         ? (item.args as Record<string, unknown>)
         : null;
     const hint = args?.command ?? args?.path;
+    const previewUrl =
+      item.tool === "preview" && item.status === "end" && !item.isError &&
+      item.details && typeof item.details === "object" && "url" in item.details &&
+      typeof item.details.url === "string" && item.details.url.startsWith("https://")
+        ? item.details.url : undefined;
     return (
       <details className={cn("tool-card", item.isError && "tool-error")}>
         <summary>
@@ -203,6 +216,11 @@ function Row({ item }: { item: ChatItem }) {
           <Terminal size={14} />
           <strong>{item.tool}</strong>
           {typeof hint === "string" && <code>{hint}</code>}
+          {previewUrl && (
+            <a href={previewUrl} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="font-medium text-accent">
+              Open preview ↗
+            </a>
+          )}
           <span className="tool-result-state">
             {item.status === "start" ? (
               <>

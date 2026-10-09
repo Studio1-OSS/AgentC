@@ -29,11 +29,26 @@ export const sessions = sqliteTable("sessions", {
     .notNull()
     .references(() => environments.id),
   piSessionId: text("pi_session_id").notNull(),
+  projectId: text("project_id").references(() => projects.id),
   title: text("title"),
   createdAt: text("created_at").notNull(),
   lastActiveAt: text("last_active_at"),
 });
 
+export const projects = sqliteTable("projects", {
+  id: text("id").primaryKey(),
+  environmentId: text("environment_id").notNull().references(() => environments.id),
+  name: text("name").notNull(),
+  repoUrl: text("repo_url"),
+  repoBranch: text("repo_branch"),
+  path: text("path").notNull(),
+  previewPort: integer("preview_port").notNull(),
+  status: text("status").notNull(),
+  errorMessage: text("error_message"),
+  createdAt: text("created_at").notNull(),
+});
+
 export type UserRow = typeof users.$inferSelect;
 export type EnvironmentRow = typeof environments.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
+export type ProjectRow = typeof projects.$inferSelect;

@@ -1,16 +1,15 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocketServer } from "ws";
 import type { Server as HttpServer } from "node:http";
 import {
-  ClientWsMessageSchema,
   DEFAULT_PI_AGENT_DIR,
   DEFAULT_RUNTIME_PORT,
   DEFAULT_WORKSPACE_PATH,
   resolveLlmProviderConfig,
-  type ServerEvent,
 } from "@cloud-agent/protocol";
-import { PiSessionRegistry } from "./pi.js";
+import { ProjectRegistries } from "./projects.js";
+import { handleSessionSocket } from "./socket.js";
 
 const port = Number(process.env.RUNTIME_PORT ?? DEFAULT_RUNTIME_PORT);
 const accessToken = process.env.RUNTIME_ACCESS_TOKEN ?? "";
@@ -18,11 +17,17 @@ const cwd = process.env.WORKSPACE_PATH ?? DEFAULT_WORKSPACE_PATH;
 const agentDir = process.env.PI_AGENT_DIR ?? DEFAULT_PI_AGENT_DIR;
 const llm = resolveLlmProviderConfig(process.env);
 
-const registry = new PiSessionRegistry({
+const projects = new ProjectRegistries({
   cwd,
   agentDir,
   llm,
 });
+const registry = projects.get();
+
+const projectRegistry = (query: (name: string) => string | undefined) => projects.get(
+  query("projectId") ?? "default",
+  query("previewPort") === undefined ? undefined : Number(query("previewPort")),
+);
 
 const app = new Hono();
 
@@ -50,6 +55,7 @@ function requireAuth(c: {
 app.get("/health", (c) =>
   c.json({
     ok: true,
+    multiProject: true,
     cwd,
     agentDir,
     provider: llm.providerId,
@@ -73,17 +79,20 @@ app.get("/environment", (c) =>
 );
 
 app.get("/sessions", async (c) => {
+  const registry = projectRegistry((name) => c.req.query(name));
   const sessions = await registry.listSessions();
   return c.json({ sessions });
 });
 
 app.post("/sessions", async (c) => {
+  const registry = projectRegistry((name) => c.req.query(name));
   const body = (await c.req.json().catch(() => ({}))) as { title?: string };
   const created = await registry.createSession(body.title);
   return c.json(created, 201);
 });
 
 app.get("/sessions/:id", async (c) => {
+  const registry = projectRegistry((name) => c.req.query(name));
   const id = c.req.param("id");
   try {
     await registry.openSession(id);
@@ -95,6 +104,7 @@ app.get("/sessions/:id", async (c) => {
 });
 
 app.post("/sessions/:id/open", async (c) => {
+  const registry = projectRegistry((name) => c.req.query(name));
   const id = c.req.param("id");
   try {
     const opened = await registry.openSession(id);
@@ -105,6 +115,7 @@ app.post("/sessions/:id/open", async (c) => {
 });
 
 app.post("/sessions/:id/abort", async (c) => {
+  const registry = projectRegistry((name) => c.req.query(name));
   const id = c.req.param("id");
   try {
     await registry.abort(id);
@@ -153,103 +164,18 @@ const wss = new WebSocketServer({ noServer: true });
       return;
     }
 
+    const registry = projectRegistry((name) => url.searchParams.get(name) ?? undefined);
     wss.handleUpgrade(req, socket, head, (ws) => {
-      void handleSessionSocket(ws, sessionId);
+      void handleSessionSocket(ws, sessionId, registry);
     });
   } catch {
     socket.destroy();
   }
 });
 
-async function handleSessionSocket(ws: WebSocket, sessionId: string): Promise<void> {
-  let unsubscribe: (() => void) | undefined;
-  let closed = false;
-
-  const send = (event: ServerEvent) => {
-    if (closed || ws.readyState !== ws.OPEN) return;
-    try {
-      ws.send(JSON.stringify(event));
-    } catch {
-      // ignore
-    }
-  };
-
-  try {
-    await registry.openSession(sessionId);
-    unsubscribe = registry.subscribe(sessionId, send);
-    send({
-      type: "session.state",
-      sessionId,
-      messageCount: registry.getMessages(sessionId).length,
-    });
-  } catch (err) {
-    send({
-      type: "error",
-      message: err instanceof Error ? err.message : String(err),
-      code: "session_open_failed",
-    });
-    ws.close(1011, "session_open_failed");
-    return;
-  }
-
-  ws.on("message", (data) => {
-    void (async () => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(String(data));
-      } catch {
-        send({ type: "error", message: "invalid JSON", code: "bad_request" });
-        return;
-      }
-
-      const result = ClientWsMessageSchema.safeParse(parsed);
-      if (!result.success) {
-        send({
-          type: "error",
-          message: result.error.message,
-          code: "bad_request",
-        });
-        return;
-      }
-
-      const msg = result.data;
-      try {
-        switch (msg.type) {
-          case "prompt":
-            await registry.prompt(sessionId, msg.content);
-            break;
-          case "steer":
-            await registry.steer(sessionId, msg.content);
-            break;
-          case "follow_up":
-            await registry.followUp(sessionId, msg.content);
-            break;
-          case "abort":
-            await registry.abort(sessionId);
-            break;
-          case "ping":
-            send({ type: "pong" });
-            break;
-        }
-      } catch (err) {
-        send({
-          type: "error",
-          message: err instanceof Error ? err.message : String(err),
-          code: "agent_error",
-        });
-      }
-    })();
-  });
-
-  ws.on("close", () => {
-    closed = true;
-    unsubscribe?.();
-  });
-}
-
 const shutdown = () => {
   console.log("shutting down sandbox-runtime");
-  registry.disposeAll();
+  projects.disposeAll();
   wss.close();
   process.exit(0);
 };

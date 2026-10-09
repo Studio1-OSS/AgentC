@@ -166,9 +166,13 @@ var CreateEnvironmentRequestSchema = z.object({
   /** Optional empty workspace when no repo is provided. */
   initEmpty: z.boolean().optional().default(false)
 });
+var ProjectIdSchema = z.union([z.literal("default"), z.string().uuid()]);
+var SessionRequestSchema = z.object({ title: z.string().trim().min(1).max(120).optional() });
+var OpenProjectChatSchema = z.object({ sessionId: z.string().uuid().optional() });
 var SessionRefSchema = z.object({
   id: z.string(),
   environmentId: z.string(),
+  projectId: z.string().nullable().optional(),
   piSessionId: z.string(),
   title: z.string().nullable(),
   createdAt: z.string(),
@@ -192,6 +196,9 @@ var ClientWsMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("ping")
+  }),
+  z.object({
+    type: z.literal("sync")
   })
 ]);
 var ServerEventSchema = z.discriminatedUnion("type", [
@@ -199,7 +206,10 @@ var ServerEventSchema = z.discriminatedUnion("type", [
     type: z.literal("session.state"),
     sessionId: z.string(),
     title: z.string().nullable().optional(),
-    messageCount: z.number().optional()
+    messageCount: z.number().optional(),
+    running: z.boolean().optional(),
+    messages: z.array(z.unknown()).optional(),
+    streamingMessage: z.unknown().optional()
   }),
   z.object({
     type: z.literal("message.start"),
@@ -253,7 +263,8 @@ var ServerEventSchema = z.discriminatedUnion("type", [
     code: z.string().optional()
   }),
   z.object({
-    type: z.literal("pong")
+    type: z.literal("pong"),
+    running: z.boolean().optional()
   })
 ]);
 var RuntimeSessionInfoSchema = z.object({
@@ -276,8 +287,22 @@ var PreviewResponseSchema = z.object({
   token: z.string().optional()
 });
 var DEFAULT_RUNTIME_PORT = 4096;
+var DEFAULT_WEB_PREVIEW_PORT = 3e3;
+var WEB_PREVIEW_CONFIG_PATH = "/home/daytona/.cloud-agent/preview.json";
+function webPreviewConfigPath(port2 = DEFAULT_WEB_PREVIEW_PORT) {
+  return port2 === DEFAULT_WEB_PREVIEW_PORT ? WEB_PREVIEW_CONFIG_PATH : `/home/daytona/.cloud-agent/previews/${port2}.json`;
+}
+var WebPreviewSchema = z.object({
+  url: z.string().url(),
+  port: z.number().int().min(1).max(65535),
+  expiresAt: z.string().datetime()
+});
 var DEFAULT_WORKSPACE_PATH = "/home/daytona/workspace/project";
 var DEFAULT_PI_AGENT_DIR = "/home/daytona/.pi/agent";
+
+// src/projects.ts
+import { dirname, join } from "node:path";
+import { z as z2 } from "zod";
 
 // src/pi.ts
 import {
@@ -366,7 +391,6 @@ function mapPiEvent(event) {
     case "agent_start":
       return [{ type: "run.start" }];
     case "agent_settled":
-    case "agent_end":
       return [{ type: "run.end" }];
     case "compaction_end":
       return [
@@ -397,6 +421,53 @@ function extractMessageText(content) {
   }).join("");
 }
 
+// src/preview.ts
+import { readFile } from "node:fs/promises";
+import { networkInterfaces } from "node:os";
+function createPreviewTool(port2 = DEFAULT_WEB_PREVIEW_PORT) {
+  const configPath = webPreviewConfigPath(port2);
+  return {
+    name: "preview",
+    label: "Web preview",
+    description: `Check this project's web server on port ${port2} and return its shareable HTTPS preview URL.`,
+    promptSnippet: "Check the web app and get its public preview URL",
+    promptGuidelines: [
+      `For this project's web apps, use port ${port2}. Start the dev server in the background on 0.0.0.0:${port2} (Vite: --host 0.0.0.0 --port ${port2} --strictPort). Other projects in this sandbox use different ports.`,
+      `If the dev server restricts hostnames, allow the preview proxy domain suffix from ${configPath} so refreshed signed links keep working.`,
+      "Call preview before sharing a web app. Include the returned HTTPS URL as a Markdown link in your reply instead of localhost. No ngrok installation or credentials are needed."
+    ],
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    async execute(_callId, _params, signal) {
+      const preview = WebPreviewSchema.parse(JSON.parse(await readFile(configPath, "utf8")));
+      if (preview.port !== port2) throw new Error("Preview configuration does not match this project");
+      if (Date.parse(preview.expiresAt) <= Date.now()) {
+        throw new Error("Preview link expired. Reopen the workspace to refresh it.");
+      }
+      const address = Object.values(networkInterfaces()).flat().find((info) => info?.family === "IPv4" && !info.internal)?.address ?? "127.0.0.1";
+      let response;
+      try {
+        response = await fetch(`http://${address}:${preview.port}/`, {
+          headers: { Host: new URL(preview.url).host },
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5e3)]) : AbortSignal.timeout(5e3),
+          redirect: "manual"
+        });
+      } catch (err) {
+        throw new Error(`Web server is unreachable. Start it in the background on 0.0.0.0:${preview.port} before sharing a preview.`, { cause: err });
+      }
+      await response.body?.cancel();
+      if (response.status >= 400) {
+        throw new Error(`Web server returned HTTP ${response.status}. Fix the app and allow hostname ${new URL(preview.url).hostname} in its dev-server config before sharing the preview.`);
+      }
+      return {
+        content: [{ type: "text", text: `Web preview: ${preview.url}
+Valid until ${preview.expiresAt}. Keep the server running on 0.0.0.0:${preview.port}.` }],
+        details: preview
+      };
+    }
+  };
+}
+var previewTool = createPreviewTool();
+
 // src/pi.ts
 var PiSessionRegistry = class {
   constructor(config) {
@@ -405,6 +476,7 @@ var PiSessionRegistry = class {
     mkdirSync(config.agentDir, { recursive: true });
   }
   active = /* @__PURE__ */ new Map();
+  opening = /* @__PURE__ */ new Map();
   modelRuntimePromise = null;
   resolveLlm() {
     if (this.config.llm) return this.config.llm;
@@ -466,15 +538,30 @@ var PiSessionRegistry = class {
   }
   async listSessions() {
     const sessions = await SessionManager.list(this.config.cwd);
-    return sessions.map((s) => ({
+    const listed = sessions.map((s) => ({
       id: s.id,
       path: s.path,
       title: s.name ?? (s.firstMessage ? truncate(s.firstMessage, 80) : null),
       createdAt: s.created.toISOString(),
       modifiedAt: s.modified.toISOString(),
       messageCount: s.messageCount,
-      firstMessage: s.firstMessage
+      firstMessage: s.firstMessage,
+      running: this.active.has(s.id) && this.isRunning(s.id)
     }));
+    for (const [id, entry] of this.active) {
+      if (listed.some((session) => session.id === id)) continue;
+      listed.push({
+        id,
+        path: entry.session.sessionFile ?? "",
+        title: entry.session.sessionName ?? null,
+        createdAt: entry.createdAt,
+        modifiedAt: entry.createdAt,
+        messageCount: entry.session.messages.length,
+        firstMessage: "",
+        running: this.isRunning(id)
+      });
+    }
+    return listed;
   }
   async createSession(title) {
     const modelRuntime = await this.getModelRuntime();
@@ -484,6 +571,7 @@ var PiSessionRegistry = class {
       agentDir: this.config.agentDir,
       modelRuntime,
       model,
+      customTools: [createPreviewTool(this.config.previewPort)],
       sessionManager: SessionManager.create(this.config.cwd)
     });
     const id = session.sessionId;
@@ -499,6 +587,17 @@ var PiSessionRegistry = class {
   async openSession(sessionId) {
     const existing = this.active.get(sessionId);
     if (existing) return { id: sessionId };
+    const pending = this.opening.get(sessionId);
+    if (pending) return pending;
+    const loading = this.loadSession(sessionId);
+    this.opening.set(sessionId, loading);
+    try {
+      return await loading;
+    } finally {
+      this.opening.delete(sessionId);
+    }
+  }
+  async loadSession(sessionId) {
     const sessions = await SessionManager.list(this.config.cwd);
     const match = sessions.find((s) => s.id === sessionId);
     if (!match) {
@@ -511,6 +610,7 @@ var PiSessionRegistry = class {
       agentDir: this.config.agentDir,
       modelRuntime,
       model,
+      customTools: [createPreviewTool(this.config.previewPort)],
       sessionManager: SessionManager.open(match.path)
     });
     this.track(session);
@@ -532,6 +632,10 @@ var PiSessionRegistry = class {
   }
   async prompt(sessionId, content) {
     const entry = this.getOrThrow(sessionId);
+    if (entry.prompting || !entry.session.isIdle) {
+      throw new Error("The agent is still replying. Wait for it to finish or stop the current reply.");
+    }
+    entry.prompting = true;
     this.emit(entry, { type: "run.start" });
     try {
       await entry.session.prompt(content);
@@ -543,15 +647,18 @@ var PiSessionRegistry = class {
       });
       throw err;
     } finally {
+      entry.prompting = false;
       this.emit(entry, { type: "run.end" });
     }
   }
   async steer(sessionId, content) {
     const entry = this.getOrThrow(sessionId);
+    if (!this.isRunning(sessionId)) return this.prompt(sessionId, content);
     await entry.session.steer(content);
   }
   async followUp(sessionId, content) {
     const entry = this.getOrThrow(sessionId);
+    if (!this.isRunning(sessionId)) return this.prompt(sessionId, content);
     await entry.session.followUp(content);
   }
   async abort(sessionId) {
@@ -561,6 +668,21 @@ var PiSessionRegistry = class {
   getMessages(sessionId) {
     const entry = this.getOrThrow(sessionId);
     return entry.session.messages;
+  }
+  isRunning(sessionId) {
+    const entry = this.getOrThrow(sessionId);
+    return Boolean(entry.prompting || !entry.session.isIdle);
+  }
+  getState(sessionId) {
+    const entry = this.getOrThrow(sessionId);
+    return {
+      type: "session.state",
+      sessionId,
+      messageCount: entry.session.messages.length,
+      messages: entry.session.messages,
+      running: this.isRunning(sessionId),
+      streamingMessage: entry.session.agent.state.streamingMessage
+    };
   }
   disposeSession(sessionId) {
     const entry = this.active.get(sessionId);
@@ -578,10 +700,12 @@ var PiSessionRegistry = class {
     const id = session.sessionId;
     const entry = {
       session,
-      listeners: /* @__PURE__ */ new Set()
+      listeners: /* @__PURE__ */ new Set(),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
     };
     entry.unsubscribe = session.subscribe((event) => {
       for (const mapped of mapPiEvent(event)) {
+        if (mapped.type === "run.end" && entry.prompting) continue;
         this.emit(entry, mapped);
       }
     });
@@ -601,17 +725,120 @@ function truncate(text, max) {
   return cleaned.length <= max ? cleaned : `${cleaned.slice(0, max - 1)}\u2026`;
 }
 
+// src/projects.ts
+var ProjectRegistries = class {
+  constructor(config) {
+    this.config = config;
+  }
+  registries = /* @__PURE__ */ new Map();
+  ports = /* @__PURE__ */ new Map();
+  get(projectId = "default", previewPort = DEFAULT_WEB_PREVIEW_PORT) {
+    ProjectIdSchema.parse(projectId);
+    z2.number().int().min(1).max(65535).parse(previewPort);
+    if (projectId === "default" && previewPort !== DEFAULT_WEB_PREVIEW_PORT) throw new Error("Invalid default project port");
+    if (this.ports.has(projectId) && this.ports.get(projectId) !== previewPort) throw new Error("Project preview port changed");
+    let registry2 = this.registries.get(projectId);
+    if (!registry2) {
+      const cwd2 = projectId === "default" ? this.config.cwd : join(dirname(this.config.cwd), "projects", projectId);
+      registry2 = new PiSessionRegistry({ ...this.config, cwd: cwd2, previewPort });
+      this.registries.set(projectId, registry2);
+      this.ports.set(projectId, previewPort);
+    }
+    return registry2;
+  }
+  disposeAll() {
+    for (const registry2 of this.registries.values()) registry2.disposeAll();
+  }
+};
+
+// src/socket.ts
+async function handleSessionSocket(ws, sessionId, registry2) {
+  let unsubscribe;
+  let closed = false;
+  const send = (event) => {
+    if (!closed && ws.readyState === ws.OPEN) ws.send(JSON.stringify(event));
+  };
+  ws.on("close", () => {
+    closed = true;
+    unsubscribe?.();
+  });
+  ws.on("error", () => ws.close());
+  const ready = registry2.openSession(sessionId);
+  ws.on("message", (data) => {
+    void (async () => {
+      let parsed;
+      try {
+        parsed = JSON.parse(String(data));
+      } catch {
+        send({ type: "error", message: "invalid JSON", code: "bad_request" });
+        return;
+      }
+      const result = ClientWsMessageSchema.safeParse(parsed);
+      if (!result.success) {
+        send({ type: "error", message: result.error.message, code: "bad_request" });
+        return;
+      }
+      try {
+        await ready;
+        if (closed) return;
+        const msg = result.data;
+        switch (msg.type) {
+          case "prompt":
+            await registry2.prompt(sessionId, msg.content);
+            break;
+          case "steer":
+            await registry2.steer(sessionId, msg.content);
+            break;
+          case "follow_up":
+            await registry2.followUp(sessionId, msg.content);
+            break;
+          case "abort":
+            await registry2.abort(sessionId);
+            break;
+          case "ping":
+            send({ type: "pong", running: registry2.isRunning(sessionId) });
+            break;
+          case "sync":
+            send(registry2.getState(sessionId));
+            break;
+        }
+      } catch (err) {
+        send({ type: "error", message: err instanceof Error ? err.message : String(err), code: "agent_error" });
+        if (closed) return;
+        try {
+          send(registry2.getState(sessionId));
+        } catch {
+          ws.close(1011, "session_unavailable");
+        }
+      }
+    })();
+  });
+  try {
+    await ready;
+    if (closed) return;
+    unsubscribe = registry2.subscribe(sessionId, send);
+  } catch (err) {
+    send({ type: "error", message: err instanceof Error ? err.message : String(err), code: "session_open_failed" });
+    ws.close(1011, "session_open_failed");
+  }
+}
+
 // src/server.ts
 var port = Number(process.env.RUNTIME_PORT ?? DEFAULT_RUNTIME_PORT);
 var accessToken = process.env.RUNTIME_ACCESS_TOKEN ?? "";
 var cwd = process.env.WORKSPACE_PATH ?? DEFAULT_WORKSPACE_PATH;
 var agentDir = process.env.PI_AGENT_DIR ?? DEFAULT_PI_AGENT_DIR;
 var llm = resolveLlmProviderConfig(process.env);
-var registry = new PiSessionRegistry({
+var projects = new ProjectRegistries({
   cwd,
   agentDir,
   llm
 });
+var registry = projects.get();
+var projectRegistry = (query) => projects.get(
+  query("projectId") ?? "default",
+  query("previewPort") === void 0 ? void 0 : Number(query("previewPort"))
+);
 var app = new Hono();
 function unauthorized() {
   return new Response(JSON.stringify({ error: "unauthorized" }), {
@@ -633,6 +860,7 @@ app.get(
   "/health",
   (c) => c.json({
     ok: true,
+    multiProject: true,
     cwd,
     agentDir,
     provider: llm.providerId,
@@ -654,37 +882,42 @@ app.get(
   })
 );
 app.get("/sessions", async (c) => {
-  const sessions = await registry.listSessions();
+  const registry2 = projectRegistry((name) => c.req.query(name));
+  const sessions = await registry2.listSessions();
   return c.json({ sessions });
 });
 app.post("/sessions", async (c) => {
+  const registry2 = projectRegistry((name) => c.req.query(name));
   const body = await c.req.json().catch(() => ({}));
-  const created = await registry.createSession(body.title);
+  const created = await registry2.createSession(body.title);
   return c.json(created, 201);
 });
 app.get("/sessions/:id", async (c) => {
+  const registry2 = projectRegistry((name) => c.req.query(name));
   const id = c.req.param("id");
   try {
-    await registry.openSession(id);
+    await registry2.openSession(id);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
   }
-  const messages = registry.getMessages(id);
+  const messages = registry2.getMessages(id);
   return c.json({ id, messages });
 });
 app.post("/sessions/:id/open", async (c) => {
+  const registry2 = projectRegistry((name) => c.req.query(name));
   const id = c.req.param("id");
   try {
-    const opened = await registry.openSession(id);
+    const opened = await registry2.openSession(id);
     return c.json(opened);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
   }
 });
 app.post("/sessions/:id/abort", async (c) => {
+  const registry2 = projectRegistry((name) => c.req.query(name));
   const id = c.req.param("id");
   try {
-    await registry.abort(id);
+    await registry2.abort(id);
     return c.json({ ok: true });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
@@ -721,94 +954,17 @@ server.on("upgrade", (req, socket, head) => {
       socket.destroy();
       return;
     }
+    const registry2 = projectRegistry((name) => url.searchParams.get(name) ?? void 0);
     wss.handleUpgrade(req, socket, head, (ws) => {
-      void handleSessionSocket(ws, sessionId);
+      void handleSessionSocket(ws, sessionId, registry2);
     });
   } catch {
     socket.destroy();
   }
 });
-async function handleSessionSocket(ws, sessionId) {
-  let unsubscribe;
-  let closed = false;
-  const send = (event) => {
-    if (closed || ws.readyState !== ws.OPEN) return;
-    try {
-      ws.send(JSON.stringify(event));
-    } catch {
-    }
-  };
-  try {
-    await registry.openSession(sessionId);
-    unsubscribe = registry.subscribe(sessionId, send);
-    send({
-      type: "session.state",
-      sessionId,
-      messageCount: registry.getMessages(sessionId).length
-    });
-  } catch (err) {
-    send({
-      type: "error",
-      message: err instanceof Error ? err.message : String(err),
-      code: "session_open_failed"
-    });
-    ws.close(1011, "session_open_failed");
-    return;
-  }
-  ws.on("message", (data) => {
-    void (async () => {
-      let parsed;
-      try {
-        parsed = JSON.parse(String(data));
-      } catch {
-        send({ type: "error", message: "invalid JSON", code: "bad_request" });
-        return;
-      }
-      const result = ClientWsMessageSchema.safeParse(parsed);
-      if (!result.success) {
-        send({
-          type: "error",
-          message: result.error.message,
-          code: "bad_request"
-        });
-        return;
-      }
-      const msg = result.data;
-      try {
-        switch (msg.type) {
-          case "prompt":
-            await registry.prompt(sessionId, msg.content);
-            break;
-          case "steer":
-            await registry.steer(sessionId, msg.content);
-            break;
-          case "follow_up":
-            await registry.followUp(sessionId, msg.content);
-            break;
-          case "abort":
-            await registry.abort(sessionId);
-            break;
-          case "ping":
-            send({ type: "pong" });
-            break;
-        }
-      } catch (err) {
-        send({
-          type: "error",
-          message: err instanceof Error ? err.message : String(err),
-          code: "agent_error"
-        });
-      }
-    })();
-  });
-  ws.on("close", () => {
-    closed = true;
-    unsubscribe?.();
-  });
-}
 var shutdown = () => {
   console.log("shutting down sandbox-runtime");
-  registry.disposeAll();
+  projects.disposeAll();
   wss.close();
   process.exit(0);
 };

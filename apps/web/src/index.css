@@ -862,6 +862,63 @@ textarea:focus-visible {
 .session-view > div:last-child:not(.provisioning) {
   min-height: 0;
 }
+.conversation-manager {
+  flex-shrink: 0;
+  margin: 16px 30px 0;
+  padding: 12px;
+  border: 1px solid #e2e7f0;
+  border-radius: 10px;
+  background: #f7f9fd;
+}
+.conversation-controls,
+.conversation-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.conversation-manager label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #697b97;
+  font-size: 11px;
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.conversation-manager input,
+.conversation-manager select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #dde4f0;
+  border-radius: 6px;
+  color: #384761;
+  background: white;
+  font-size: 13px;
+}
+.conversation-controls button {
+  min-height: 34px;
+}
+.conversation-form {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e7f0;
+}
+.project-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: #697b97;
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .conversation-manager {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+}
 .provisioning {
   max-width: 650px;
   margin: auto;

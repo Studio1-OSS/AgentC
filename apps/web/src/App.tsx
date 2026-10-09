@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
   useRef,
+  useCallback,
   lazy,
   Suspense,
   type FormEvent,
@@ -29,15 +30,25 @@ const Chat = lazy(() =>
   import("@/components/Chat").then((module) => ({ default: module.Chat })),
 );
 import { useChatSession } from "@/hooks/useChatSession";
-import { readTokenFromUrl } from "@/lib/session";
-import { api, repoLabel, type Workspace } from "@/lib/workspaces";
+import { readTokenFromUrl, chatTargetFromToken } from "@/lib/session";
+import { api, repoLabel, normalizeRepoUrl, type Workspace } from "@/lib/workspaces";
+import { ConversationManager } from "@/components/ConversationManager";
 
-function AgentChat({ token }: { token: string }) {
-  const chat = useChatSession(token);
+function AgentChat({
+  token,
+  onSelect,
+  onResume,
+}: {
+  token: string;
+  onSelect: (token: string) => void;
+  onResume: () => void;
+}) {
+  const chat = useChatSession(token, { onGiveUp: onResume, onToken: onSelect });
   return (
     <Suspense
       fallback={<div className="provisioning">Loading conversation…</div>}
     >
+      <ConversationManager token={token} bootstrap={chat.bootstrap} onSelect={onSelect} />
       <Chat {...chat} onSend={chat.sendPrompt} onAbort={chat.abort} />
     </Suspense>
   );
@@ -57,7 +68,12 @@ export function App() {
   const [help, setHelp] = useState(false);
   const mounted = useRef(true);
   const opening = useRef<string | null>(null);
+  const openGeneration = useRef(0);
   const currentWorkspace = useRef<string | null>(null);
+  const selectChat = useCallback((value: string) => {
+    setToken(value);
+    window.history.replaceState({}, "", `/ui/?t=${encodeURIComponent(value)}`);
+  }, []);
 
   useEffect(() => {
     if (!modal) return;
@@ -117,33 +133,67 @@ export function App() {
     if (!selected) return;
     const fresh = workspaces.find((w) => w.id === selected.id);
     if (fresh) setSelected(fresh);
-    if (
-      fresh?.status === "ready" &&
-      !error &&
-      !token &&
-      opening.current !== fresh.id
-    ) {
+    if (fresh?.status === "ready" && !token && opening.current !== fresh.id) {
+      if (!currentWorkspace.current) currentWorkspace.current = fresh.id;
       void openChat(fresh);
     }
   }, [workspaces]);
 
-  async function openChat(workspace: Workspace) {
-    if (opening.current === workspace.id) return;
+  async function openChat(workspace: Workspace, force = false) {
+    if (!force && opening.current === workspace.id) return;
+    const generation = ++openGeneration.current;
     opening.current = workspace.id;
+    currentWorkspace.current = workspace.id;
     try {
       const chat = await api<{ token: string }>(
         `/${workspace.id}/chat`,
         "POST",
         {},
+        undefined,
+        120_000,
       );
-      if (mounted.current && currentWorkspace.current === workspace.id)
-        setToken(chat.token);
+      if (generation !== openGeneration.current) return;
+      if (mounted.current && currentWorkspace.current === workspace.id) {
+        setError(null);
+        selectChat(chat.token);
+      }
     } catch (err) {
-      if (currentWorkspace.current === workspace.id)
+      if (generation === openGeneration.current && currentWorkspace.current === workspace.id)
         setError((err as Error).message);
     } finally {
-      if (opening.current === workspace.id) opening.current = null;
+      if (generation === openGeneration.current) opening.current = null;
     }
+  }
+  async function resumeFromToken() {
+    const target = token ? chatTargetFromToken(token) : null;
+    if (target) {
+      if (opening.current === target.environmentId) return;
+      opening.current = target.environmentId;
+      try {
+        const chat = await api<{ token: string }>(
+          `/${target.environmentId}/projects/${target.projectId}/chat`,
+          "POST",
+          {},
+          token ?? undefined,
+          120_000,
+        );
+        if (mounted.current) {
+          setError(null);
+          selectChat(chat.token);
+        }
+        if (opening.current === target.environmentId) opening.current = null;
+        return;
+      } catch (err) {
+        if (opening.current === target.environmentId) opening.current = null;
+        if (selected) {
+          void openChat(selected, true);
+          return;
+        }
+        if (mounted.current) setError((err as Error).message);
+        return;
+      }
+    }
+    if (selected) void openChat(selected, true);
   }
   async function connect(workspace: Workspace) {
     currentWorkspace.current = workspace.id;
@@ -167,10 +217,7 @@ export function App() {
     setError(null);
     setPending(true);
     try {
-      const url = repo.trim();
-      const repoUrl = url.startsWith("https://")
-        ? url
-        : `https://github.com/${url.replace(/^github\.com\//, "")}`;
+      const repoUrl = normalizeRepoUrl(repo);
       const workspace = await api<Workspace>(
         "",
         "POST",
@@ -324,7 +371,7 @@ export function App() {
               </div>
             )}
             {token ? (
-              <AgentChat key={token} token={token} />
+              <AgentChat key={token} token={token} onSelect={selectChat} onResume={resumeFromToken} />
             ) : (
               <div className="provisioning">
                 <div className="launch-icon">
@@ -367,7 +414,10 @@ export function App() {
                 {selected?.status === "ready" && (
                   <button
                     className="primary-button"
-                    onClick={() => openChat(selected)}
+                    onClick={() => {
+                      setError(null);
+                      void openChat(selected, true);
+                    }}
                   >
                     Retry connection <RefreshCw size={15} />
                   </button>
