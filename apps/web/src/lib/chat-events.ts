@@ -29,6 +29,19 @@ export function outputOf(result: unknown) {
       ? ""
       : JSON.stringify(result, null, 2);
 }
+export function verifiedPreview(item: ChatItem, now = Date.now()): { url: string; expiresAt: string } | null {
+  if (item.kind !== "tool" || item.tool !== "preview" || item.status !== "end" || item.isError ||
+      !item.details || typeof item.details !== "object") return null;
+  const details = item.details as { url?: unknown; expiresAt?: unknown };
+  if (typeof details.url !== "string" || typeof details.expiresAt !== "string" ||
+      !(Date.parse(details.expiresAt) > now)) return null;
+  try {
+    const url = new URL(details.url);
+    return url.protocol === "https:" ? { url: url.href, expiresAt: details.expiresAt } : null;
+  } catch {
+    return null;
+  }
+}
 export function historyItems(messages: RuntimeMessage[]): ChatItem[] {
   const items: ChatItem[] = [];
   for (const m of messages) {
@@ -79,6 +92,16 @@ export function historyItems(messages: RuntimeMessage[]): ChatItem[] {
   }
   return items;
 }
+function finishRun(items: ChatItem[]): ChatItem[] {
+  return items.map((item): ChatItem => {
+    if (item.kind === "assistant") return { ...item, streaming: false };
+    if (item.kind === "tool" && item.status === "start") return {
+      ...item, status: "end", isError: true,
+      output: [item.output, "Tool interrupted before it completed. You can retry your request."].filter(Boolean).join("\n"),
+    };
+    return item;
+  }).filter((item) => item.kind !== "assistant" || item.text || item.thinking || item.images?.length);
+}
 export function applyChatEvent(
   items: ChatItem[],
   event: Record<string, unknown>,
@@ -87,6 +110,11 @@ export function applyChatEvent(
     .map((i) => i.kind === "assistant" && !!i.streaming)
     .lastIndexOf(true);
   switch (event.type) {
+    case "model.fallback":
+      return [
+        ...items.filter((_, index) => index !== current),
+        { id: id(), kind: "system", text: String(event.message ?? "Continuing with a free model") },
+      ];
     case "session.state": {
       if (!Array.isArray(event.messages)) return items;
       const restored = historyItems(event.messages as RuntimeMessage[]);
@@ -95,7 +123,7 @@ export function applyChatEvent(
         const partial = historyItems([streaming]);
         restored.push(...partial.map((item) => item.kind === "assistant" ? { ...item, streaming: true } : item));
       }
-      return restored;
+      return event.running === false ? finishRun(restored) : restored;
     }
     case "message.start":
       return event.role === "assistant"
@@ -161,12 +189,7 @@ export function applyChatEvent(
         );
     }
     case "run.end":
-      return items
-        .map((i) => (i.kind === "assistant" ? { ...i, streaming: false } : i))
-        .filter(
-          (i) =>
-            i.kind !== "assistant" || i.text || i.thinking || i.images?.length,
-        );
+      return finishRun(items);
     case "tool.start":
     case "tool.update":
     case "tool.end": {

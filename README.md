@@ -36,6 +36,8 @@ DAYTONA_API_KEY=…
 
 Choose a model that supports tool calls; chat-only models can print commands without executing them. The included configuration uses [Qwen3 235B via OpenRouter](https://openrouter.ai/qwen/qwen3-235b-a22b-2507). Check your OpenRouter [allowed providers](https://openrouter.ai/settings/privacy) if inference reports that no endpoint is available.
 
+If the primary model errors, returns an empty reply, or stops producing model events for 45 seconds, the agent automatically retries that request with [OpenRouter's free router](https://openrouter.ai/openrouter/free). The router selects free models that support the request's tools. Completed tool work and the conversation stay intact; chat shows the switch and the active model. The agent keeps using free models for the rest of that run and tries the configured primary model again on the next prompt. Fallback requires `OPENROUTER_API_KEY`, including when another provider is primary, and your [allowed providers](https://openrouter.ai/settings/privacy) must permit providers serving free models. Free models have their own availability and rate limits; if fallback also fails, chat shows the error and remains usable. Stop cancels the current request without triggering fallback.
+
 ## Setup
 
 ```bash
@@ -57,15 +59,19 @@ Open **http://127.0.0.1:8787/**. Paste a public GitHub URL (or `owner/repo`), op
 
 Agent replies render Markdown with highlighted code and copying, tables, task lists, links, and images. Tool cards show arguments, streamed output, errors, and edit diffs; reasoning is collapsible.
 
-Every new or resumed sandbox gets a [Daytona signed web preview](https://www.daytona.io/docs/en/preview/) for port **3000**; ngrok and extra tunnel credentials are unnecessary. The agent is instructed to run web apps in the background on `0.0.0.0:3000`, call its `preview` tool to check server readiness and the preview hostname, and share the resulting HTTPS link. Successful preview tool cards also have an **Open preview** link. Vite apps must allow the preview proxy domain. Links last 24 hours and are refreshed when you reopen the chat or resume the sandbox; the app server must keep running for a preview to work. Sandbox control ports remain private.
+Every new or resumed sandbox gets a [Daytona signed web preview](https://www.daytona.io/docs/en/preview/) for port **3000**; ngrok and extra tunnel credentials are unnecessary. The agent's system prompt requires it to automatically run created or updated web apps and visual artifacts in the background on `0.0.0.0:3000`, call its `preview` tool to check server readiness and the preview hostname, and share the resulting HTTPS link rather than localhost. Chat keeps a verified **Open preview** action in its header as well as on successful preview tool cards. Vite apps must allow the preview proxy domain. Links last 24 hours and are refreshed when you reopen the chat or resume the sandbox; the app server must keep running for a preview to work. Sandbox control ports remain private. After deploying this update, stop/resume existing workspaces once to upgrade their runtime and apply the new prompt to reopened conversations.
 
 Chat reconnects automatically after connection loss and restores both the transcript and any reply in progress. The running indicator stays active through provider retries until Pi finishes. If reconnect attempts fail, use **Reconnect**; **Stop** remains available during a connected active run.
+
+Server startup and preview checks run in order, with brief readiness retries. The agent detaches web servers and records their PIDs; broad `pkill -f` commands are rejected because they can kill the agent runtime itself. Shell commands default to a 60-second timeout unless a different timeout is supplied. After an interrupted run or runtime restart, unfinished tool cards show an interruption instead of remaining stuck on Running.
 
 The dashboard lists this browser's workspaces with open, stop, resume, and delete actions. Returning to a workspace resumes its most recently opened conversation, including the transcript. No CLI, API key entry, or token link is needed.
 
 Inside a workspace, use **New project** to add a public GitHub repository or an empty project to the existing sandbox. The **Project** picker switches between them. Each project has its own working directory, conversation history, and web preview port; the original project and its existing sessions stay in place. Use **New chat** to start a fresh conversation within a project, and the **Conversation** picker to reopen previous chats. Switching conversations leaves active replies running. Projects share sandbox compute and filesystem access, and stopping the sandbox stops all of them. After deploying this update, stop/resume an older workspace once to enable project management in its runtime.
 
 Guest ownership uses a signed HttpOnly cookie lasting 30 days. Clearing cookies loses access to those workspaces; this version does not provide account login or cross-device access. A guest can keep up to five workspaces. This is a browser guest MVP; account authentication and deployment-wide usage limits are still needed for an unrestricted public service.
+
+Opening a valid chat link also remembers that link's workspace in a separate HttpOnly cookie until the token expires. It appears alongside this browser's workspaces and supports resume and sandbox controls, without granting access to the link owner's other workspaces.
 
 For frontend development, run `pnpm dev:control-plane` and `pnpm dev:web`, then open http://localhost:5173/ui/.
 

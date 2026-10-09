@@ -8,13 +8,16 @@ import {
 } from "@cloud-agent/protocol";
 import {
   createAgentSession,
+  DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
   type AgentSession,
 } from "@earendil-works/pi-coding-agent";
 import { mkdirSync } from "node:fs";
 import { mapPiEvent } from "./events.js";
-import { createPreviewTool } from "./preview.js";
+import { createPreviewTool, previewSystemPrompt } from "./preview.js";
+import { withModelFallback } from "./model-fallback.js";
+import { createSandboxBashTool } from "./bash.js";
 
 export type RuntimeConfig = {
   cwd: string;
@@ -38,6 +41,8 @@ type ActiveSession = {
   unsubscribe?: () => void;
   prompting?: boolean;
   createdAt: string;
+  model?: string;
+  provider?: string;
 };
 
 /**
@@ -96,6 +101,11 @@ export class PiSessionRegistry {
           await runtime.setRuntimeApiKey("openai", llm.apiKey);
         }
 
+        const openrouterKey = this.config.openrouterApiKey ?? process.env.OPENROUTER_API_KEY;
+        if (llm.providerId !== OPENROUTER_PROVIDER_ID && openrouterKey) {
+          await runtime.setRuntimeApiKey(OPENROUTER_PROVIDER_ID, openrouterKey);
+        }
+
         return runtime;
       })();
     }
@@ -130,6 +140,16 @@ export class PiSessionRegistry {
     return model;
   }
 
+  private async resourceLoader() {
+    const loader = new DefaultResourceLoader({
+      cwd: this.config.cwd,
+      agentDir: this.config.agentDir,
+      appendSystemPromptOverride: (base) => [...base, previewSystemPrompt(this.config.previewPort)],
+    });
+    await loader.reload();
+    return loader;
+  }
+
   async listSessions() {
     const sessions = await SessionManager.list(this.config.cwd);
     const listed = sessions.map((s) => ({
@@ -162,7 +182,8 @@ export class PiSessionRegistry {
       agentDir: this.config.agentDir,
       modelRuntime,
       model,
-      customTools: [createPreviewTool(this.config.previewPort)],
+      resourceLoader: await this.resourceLoader(),
+      customTools: [createPreviewTool(this.config.previewPort), createSandboxBashTool(this.config.cwd)],
       sessionManager: SessionManager.create(this.config.cwd),
     });
 
@@ -177,7 +198,7 @@ export class PiSessionRegistry {
       }
     }
 
-    this.track(session);
+    this.track(session, modelRuntime);
     return { id };
   }
 
@@ -210,11 +231,12 @@ export class PiSessionRegistry {
       agentDir: this.config.agentDir,
       modelRuntime,
       model,
-      customTools: [createPreviewTool(this.config.previewPort)],
+      resourceLoader: await this.resourceLoader(),
+      customTools: [createPreviewTool(this.config.previewPort), createSandboxBashTool(this.config.cwd)],
       sessionManager: SessionManager.open(match.path),
     });
 
-    this.track(session);
+    this.track(session, modelRuntime);
     return { id: session.sessionId };
   }
 
@@ -242,8 +264,11 @@ export class PiSessionRegistry {
     if (entry.prompting || !entry.session.isIdle) {
       throw new Error("The agent is still replying. Wait for it to finish or stop the current reply.");
     }
+    const llm = this.resolveLlm();
     entry.prompting = true;
-    this.emit(entry, { type: "run.start" });
+    entry.model = llm.modelId;
+    entry.provider = llm.providerId;
+    this.emit(entry, { type: "run.start", model: entry.model, provider: entry.provider });
     try {
       await entry.session.prompt(content);
     } catch (err) {
@@ -295,6 +320,8 @@ export class PiSessionRegistry {
       messages: entry.session.messages,
       running: this.isRunning(sessionId),
       streamingMessage: entry.session.agent.state.streamingMessage,
+      model: entry.model ?? this.resolveLlm().modelId,
+      provider: entry.provider ?? this.resolveLlm().providerId,
     };
   }
 
@@ -312,13 +339,25 @@ export class PiSessionRegistry {
     }
   }
 
-  private track(session: AgentSession): void {
+  private track(session: AgentSession, runtime: ModelRuntime): void {
     const id = session.sessionId;
     const entry: ActiveSession = {
       session,
       listeners: new Set(),
       createdAt: new Date().toISOString(),
     };
+
+    const llm = this.resolveLlm();
+    const openrouterKey = llm.providerId === OPENROUTER_PROVIDER_ID ? llm.apiKey : this.config.openrouterApiKey ?? process.env.OPENROUTER_API_KEY;
+    const fallback = openrouterKey && runtime.getModel(OPENROUTER_PROVIDER_ID, "openrouter/free");
+    if (fallback) {
+      session.agent.streamFunction = withModelFallback(session.agent.streamFunction, fallback, () => {
+        entry.model = fallback.id;
+        entry.provider = fallback.provider;
+        this.emit(entry, { type: "model.fallback", model: fallback.id, provider: fallback.provider,
+          message: "The primary model could not respond. Continuing with a free model." });
+      });
+    }
 
     entry.unsubscribe = session.subscribe((event) => {
       for (const mapped of mapPiEvent(event)) {

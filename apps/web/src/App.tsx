@@ -130,14 +130,18 @@ export function App() {
     };
   }, []);
   useEffect(() => {
-    if (!selected) return;
-    const fresh = workspaces.find((w) => w.id === selected.id);
-    if (fresh) setSelected(fresh);
+    const target = token ? chatTargetFromToken(token) : null;
+    const id = target?.environmentId ?? selected?.id;
+    const fresh = workspaces.find((w) => w.id === id);
+    if (fresh) {
+      setSelected(fresh);
+      currentWorkspace.current = fresh.id;
+    }
     if (fresh?.status === "ready" && !token && opening.current !== fresh.id) {
       if (!currentWorkspace.current) currentWorkspace.current = fresh.id;
       void openChat(fresh);
     }
-  }, [workspaces]);
+  }, [workspaces, token]);
 
   async function openChat(workspace: Workspace, force = false) {
     if (!force && opening.current === workspace.id) return;

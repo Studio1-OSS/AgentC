@@ -1,8 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { applyChatEvent, historyItems } from "./chat-events";
+import { applyChatEvent, historyItems, verifiedPreview } from "./chat-events";
 import type { ChatItem } from "./session";
 
 describe("agent transcript", () => {
+  it("marks missing tool results interrupted after a runtime restart while preserving live runs", () => {
+    const state = { type: "session.state", messages: [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "bash", name: "bash", arguments: { command: "start server" } },
+        { type: "toolCall", id: "preview", name: "preview", arguments: {} },
+      ] },
+    ] };
+    const active = applyChatEvent([], { ...state, running: true });
+    expect(active.every((item) => item.kind === "tool" && item.status === "start")).toBe(true);
+    for (const items of [applyChatEvent([], { ...state, running: false }), applyChatEvent(active, { type: "run.end" })]) {
+      expect(items).toHaveLength(2);
+      expect(items.every((item) => item.kind === "tool" && item.status === "end" && item.isError)).toBe(true);
+      expect(items[0]).toMatchObject({ output: expect.stringContaining("interrupted") });
+    }
+  });
+  it("replaces a failed partial reply with a fallback notice while preserving completed tools", () => {
+    const items: ChatItem[] = [
+      { id: "user", kind: "user", text: "Build an app" },
+      { id: "tool", kind: "tool", tool: "write", callId: "call", status: "end", output: "Saved" },
+      { id: "partial", kind: "assistant", text: "Interrupted", streaming: true },
+    ];
+    const next = applyChatEvent(items, { type: "model.fallback", message: "Continuing with a free model" });
+    expect(next.map((item) => item.kind)).toEqual(["user", "tool", "system"]);
+    expect(next[2]).toMatchObject({ text: "Continuing with a free model" });
+    expect(applyChatEvent(next, { type: "message.delta", text: "Recovered" })[3]).toMatchObject({ text: "Recovered", streaming: true });
+  });
+  it("only offers successful, unexpired HTTPS previews", () => {
+    const item: ChatItem = { id: "preview", kind: "tool", tool: "preview", callId: "p", status: "end",
+      details: { url: "https://3000-signed.proxy.daytona.work", expiresAt: "2026-10-10T00:00:00.000Z" } };
+    const now = Date.parse("2026-10-09T00:00:00Z");
+    expect(verifiedPreview(item, now)?.url).toBe("https://3000-signed.proxy.daytona.work/");
+    expect(verifiedPreview({ ...item, isError: true }, now)).toBeNull();
+    expect(verifiedPreview({ ...item, status: "start" }, now)).toBeNull();
+    expect(verifiedPreview(item, now + 86400_000)).toBeNull();
+    expect(verifiedPreview({ ...item, details: { url: "http://localhost:3000", expiresAt: "2026-10-10T00:00:00Z" } }, now)).toBeNull();
+  });
   it("restores missed history and a partial reply without appending duplicates on sync", () => {
     const state = {
       type: "session.state",

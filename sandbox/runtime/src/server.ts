@@ -6,6 +6,7 @@ import {
   DEFAULT_PI_AGENT_DIR,
   DEFAULT_RUNTIME_PORT,
   DEFAULT_WORKSPACE_PATH,
+  RUNTIME_VERSION,
   resolveLlmProviderConfig,
 } from "@cloud-agent/protocol";
 import { ProjectRegistries } from "./projects.js";
@@ -56,6 +57,7 @@ app.get("/health", (c) =>
   c.json({
     ok: true,
     multiProject: true,
+    runtimeVersion: RUNTIME_VERSION,
     cwd,
     agentDir,
     provider: llm.providerId,

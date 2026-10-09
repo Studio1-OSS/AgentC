@@ -5,13 +5,32 @@ import { previewTool, createPreviewTool } from "./preview.js";
 
 vi.mock("node:fs/promises", () => ({ readFile: vi.fn() }));
 vi.mock("node:os", () => ({ networkInterfaces: () => ({ eth0: [{ family: "IPv4", internal: false, address: "10.0.0.2" }] }) }));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const run = () => previewTool.execute("call", {}, undefined, undefined, {} as Parameters<ToolDefinition["execute"]>[4]);
 const configure = (expiresAt = new Date(Date.now() + 86400_000).toISOString()) => {
   vi.mocked(readFile).mockResolvedValue(JSON.stringify({ url: "https://3000-signed.proxy.daytona.work", port: 3000, expiresAt }));
 };
 
 describe("public web previews", () => {
+  it("waits for the server to become ready and keeps dependent tool calls sequential", async () => {
+    vi.useFakeTimers();
+    configure();
+    const fetch = vi.fn().mockRejectedValueOnce(new TypeError("not ready")).mockResolvedValueOnce(new Response("app"));
+    vi.stubGlobal("fetch", fetch);
+    const pending = run();
+    await vi.advanceTimersByTimeAsync(500);
+    expect((await pending).details).toMatchObject({ port: 3000 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(previewTool.executionMode).toBe("sequential");
+  });
+  it("can stop while waiting for a server without retrying again", async () => {
+    configure();
+    const controller = new AbortController();
+    const fetch = vi.fn(async () => { controller.abort(); throw new TypeError("not ready"); });
+    vi.stubGlobal("fetch", fetch);
+    await expect(previewTool.execute("call", {}, controller.signal, undefined, {} as Parameters<ToolDefinition["execute"]>[4])).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
   it("reads the selected project's preview configuration and rejects another project's port", async () => {
     const tool = createPreviewTool(3001);
     vi.mocked(readFile).mockResolvedValue(JSON.stringify({ url: "https://3001-signed.proxy.daytona.work", port: 3001, expiresAt: new Date(Date.now() + 86400_000).toISOString() }));

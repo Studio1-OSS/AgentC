@@ -105,6 +105,10 @@ export function useChatSession(
           } catch {
             return;
           }
+          if (["session.state", "run.start", "model.fallback"].includes(String(data.type)) &&
+              typeof data.model === "string" && typeof data.provider === "string") {
+            setBootstrap((previous) => previous ? { ...previous, model: String(data.model), provider: String(data.provider) } : previous);
+          }
           if (data.type === "session.state") {
             clearTimeout(connectionTimer);
             retries = 0;
@@ -113,7 +117,10 @@ export function useChatSession(
             setConn("ready");
             updateBusy(Boolean(data.running));
           } else if (data.type === "run.start") {
+            setError(null);
             updateBusy(true);
+          } else if (data.type === "model.fallback") {
+            setError(null);
           } else if (data.type === "run.end") {
             updateBusy(false);
           } else if (data.type === "pong") {

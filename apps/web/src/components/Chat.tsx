@@ -7,10 +7,12 @@ import {
   CircleAlert,
   Terminal,
   ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Markdown } from "@/components/Markdown";
 import type { Bootstrap, ChatItem } from "@/lib/session";
+import { verifiedPreview } from "@/lib/chat-events";
 
 type Props = {
   bootstrap: Bootstrap | null;
@@ -36,6 +38,8 @@ export function Chat({
   const [draft, setDraft] = useState("");
   const followRef = useRef(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const latestPreview = [...items].reverse().find((item) => item.kind === "tool" && item.tool === "preview");
+  const preview = latestPreview ? verifiedPreview(latestPreview) : null;
 
   useEffect(() => {
     if (followRef.current)
@@ -67,7 +71,16 @@ export function Chat({
             {bootstrap?.repoUrl ? ` · ${bootstrap.repoUrl}` : ""}
           </p>
         </div>
-        <StatusPill conn={conn} busy={busy} />
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {preview && (
+            <a href={preview.url} target="_blank" rel="noopener noreferrer"
+              title="Open the verified Daytona preview"
+              className="inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent-soft px-3 py-1.5 text-xs font-medium text-accent">
+              <ExternalLink size={13} /> Open preview
+            </a>
+          )}
+          <StatusPill conn={conn} busy={busy} />
+        </div>
       </header>
 
       <div
@@ -87,6 +100,12 @@ export function Chat({
           {items.map((item) => (
             <Row key={item.id} item={item} />
           ))}
+          {busy && (
+            <p role="status" className="flex items-center gap-2 px-1 text-sm text-ink-soft">
+              <LoaderCircle size={14} className="animate-spin" />
+              {conn === "ready" ? "Agent working…" : "Reconnecting to your running agent…"}
+            </p>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -115,7 +134,7 @@ export function Chat({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               submit(e);
             }
@@ -143,7 +162,7 @@ export function Chat({
           ) : (
             <button
               type="submit"
-              disabled={!draft.trim() || conn !== "ready"}
+              disabled={!draft.trim() || busy || conn !== "ready"}
               className="inline-flex size-10 items-center justify-center rounded-full bg-accent text-paper-elevated transition enabled:hover:opacity-90 disabled:opacity-40"
               aria-label="Send"
             >
@@ -204,11 +223,7 @@ function Row({ item }: { item: ChatItem }) {
         ? (item.args as Record<string, unknown>)
         : null;
     const hint = args?.command ?? args?.path;
-    const previewUrl =
-      item.tool === "preview" && item.status === "end" && !item.isError &&
-      item.details && typeof item.details === "object" && "url" in item.details &&
-      typeof item.details.url === "string" && item.details.url.startsWith("https://")
-        ? item.details.url : undefined;
+    const previewUrl = verifiedPreview(item)?.url;
     return (
       <details className={cn("tool-card", item.isError && "tool-error")}>
         <summary>

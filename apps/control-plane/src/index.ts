@@ -31,20 +31,6 @@ app.get("/health", (c) =>
   }),
 );
 
-/** Public bootstrap for the browser chat (auth = short-lived UI token). */
-app.get("/ui/api/bootstrap", async (c) => {
-  const token = c.req.query("t") ?? c.req.query("token") ?? "";
-  try {
-    const data = await service.getUiBootstrap(token);
-    return c.json(data);
-  } catch (err) {
-    return c.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      401,
-    );
-  }
-});
-
 app.route("/ui/api", createBrowserRoutes(service, config.browserSessionSecret));
 app.get("/", (c) => c.redirect("/ui/"));
 

@@ -209,7 +209,9 @@ var ServerEventSchema = z.discriminatedUnion("type", [
     messageCount: z.number().optional(),
     running: z.boolean().optional(),
     messages: z.array(z.unknown()).optional(),
-    streamingMessage: z.unknown().optional()
+    streamingMessage: z.unknown().optional(),
+    model: z.string().optional(),
+    provider: z.string().optional()
   }),
   z.object({
     type: z.literal("message.start"),
@@ -248,7 +250,15 @@ var ServerEventSchema = z.discriminatedUnion("type", [
     result: z.unknown().optional()
   }),
   z.object({
-    type: z.literal("run.start")
+    type: z.literal("run.start"),
+    model: z.string().optional(),
+    provider: z.string().optional()
+  }),
+  z.object({
+    type: z.literal("model.fallback"),
+    model: z.string(),
+    provider: z.string(),
+    message: z.string()
   }),
   z.object({
     type: z.literal("run.end")
@@ -286,6 +296,7 @@ var PreviewResponseSchema = z.object({
   expiresInSeconds: z.number().optional(),
   token: z.string().optional()
 });
+var RUNTIME_VERSION = 3;
 var DEFAULT_RUNTIME_PORT = 4096;
 var DEFAULT_WEB_PREVIEW_PORT = 3e3;
 var WEB_PREVIEW_CONFIG_PATH = "/home/daytona/.cloud-agent/preview.json";
@@ -307,6 +318,7 @@ import { z as z2 } from "zod";
 // src/pi.ts
 import {
   createAgentSession,
+  DefaultResourceLoader,
   ModelRuntime,
   SessionManager
 } from "@earendil-works/pi-coding-agent";
@@ -424,10 +436,20 @@ function extractMessageText(content) {
 // src/preview.ts
 import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
+function previewSystemPrompt(port2 = DEFAULT_WEB_PREVIEW_PORT) {
+  return `You are working in a remote Daytona sandbox. Complete the user's request with minimal interruptions and concise progress updates.
+Whenever you create or update a runnable website, app, or visual artifact, automatically start it in the background on 0.0.0.0:${port2}, call the preview tool, fix any readiness or hostname errors, and include the verified Daytona HTTPS URL as a Markdown link in your final reply. Do this without waiting for the user to ask for a preview.
+For static HTML or visual artifacts, use the installed Python standard-library server: nohup python3 -m http.server ${port2} --bind 0.0.0.0 </dev/null >/tmp/cloud-agent-web-${port2}.log 2>&1 & echo $!. Avoid npx serve for static pages: it may wait for installation or network access. For Vite, use --host 0.0.0.0 --port ${port2} --strictPort and allow the Daytona preview proxy domain from ${webPreviewConfigPath(port2)}. This port belongs to the current project; do not use another project's port.
+Detach all long-lived servers with nohup, redirect stdin, stdout, and stderr, and record the returned PID. Never use pkill -f to stop a server: it can kill this agent's runtime. Reuse a healthy server or stop only its recorded PID with kill <pid>. Complete file writes and server startup before checking the preview.
+Never present localhost, 127.0.0.1, 0.0.0.0, or an invented URL as a link the user can open. Read the current link through the preview tool rather than reusing an old signed URL. Keep the server running after your reply. If a preview cannot be made ready, explain the specific blocker and do not claim it works.
+For work without a browser view, report the completed result and relevant checks. Lead final replies with the outcome and, when available, the preview link.`;
+}
 function createPreviewTool(port2 = DEFAULT_WEB_PREVIEW_PORT) {
   const configPath = webPreviewConfigPath(port2);
   return {
     name: "preview",
+    executionMode: "sequential",
     label: "Web preview",
     description: `Check this project's web server on port ${port2} and return its shareable HTTPS preview URL.`,
     promptSnippet: "Check the web app and get its public preview URL",
@@ -445,15 +467,22 @@ function createPreviewTool(port2 = DEFAULT_WEB_PREVIEW_PORT) {
       }
       const address = Object.values(networkInterfaces()).flat().find((info) => info?.family === "IPv4" && !info.internal)?.address ?? "127.0.0.1";
       let response;
-      try {
-        response = await fetch(`http://${address}:${preview.port}/`, {
-          headers: { Host: new URL(preview.url).host },
-          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5e3)]) : AbortSignal.timeout(5e3),
-          redirect: "manual"
-        });
-      } catch (err) {
-        throw new Error(`Web server is unreachable. Start it in the background on 0.0.0.0:${preview.port} before sharing a preview.`, { cause: err });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        signal?.throwIfAborted();
+        try {
+          response = await fetch(`http://${address}:${preview.port}/`, {
+            headers: { Host: new URL(preview.url).host },
+            signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5e3)]) : AbortSignal.timeout(5e3),
+            redirect: "manual"
+          });
+          break;
+        } catch (err) {
+          signal?.throwIfAborted();
+          if (attempt === 2) throw new Error(`Web server is unreachable. Start it in the background on 0.0.0.0:${preview.port} before sharing a preview.`, { cause: err });
+          await delay(500, void 0, { signal });
+        }
       }
+      if (!response) throw new Error("Web server did not become ready");
       await response.body?.cancel();
       if (response.status >= 400) {
         throw new Error(`Web server returned HTTP ${response.status}. Fix the app and allow hostname ${new URL(preview.url).hostname} in its dev-server config before sharing the preview.`);
@@ -467,6 +496,131 @@ Valid until ${preview.expiresAt}. Keep the server running on 0.0.0.0:${preview.p
   };
 }
 var previewTool = createPreviewTool();
+
+// src/model-fallback.ts
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
+var MODEL_IDLE_TIMEOUT_MS = 45e3;
+function withModelFallback(stream, fallback, onFallback) {
+  let runSignal;
+  let usingFallback = false;
+  return (model, context, options) => {
+    if (runSignal !== options?.signal) {
+      runSignal = options?.signal;
+      usingFallback = false;
+    }
+    const output = createAssistantMessageEventStream();
+    void (async () => {
+      let started = false;
+      const candidates = usingFallback || model.provider === fallback.provider && model.id === fallback.id ? [fallback] : [model, fallback];
+      for (const [index, candidate] of candidates.entries()) {
+        const controller = new AbortController();
+        const signal = options?.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+        let timer;
+        let failure;
+        const wait = async (pending) => {
+          let cancel;
+          try {
+            return await Promise.race([pending, new Promise((_resolve, reject) => {
+              cancel = () => reject(new Error(options?.signal?.aborted ? "Reply stopped" : "The model stopped responding"));
+              signal.addEventListener("abort", cancel, { once: true });
+              if (signal.aborted) cancel();
+              timer = setTimeout(() => {
+                reject(new Error("The model stopped responding"));
+                controller.abort();
+              }, MODEL_IDLE_TIMEOUT_MS);
+            })]);
+          } finally {
+            clearTimeout(timer);
+            if (cancel) signal.removeEventListener("abort", cancel);
+          }
+        };
+        try {
+          if (signal.aborted) throw new Error("Reply stopped");
+          const response = await wait(Promise.resolve(stream(candidate, context, {
+            ...options,
+            signal,
+            timeoutMs: MODEL_IDLE_TIMEOUT_MS,
+            maxRetries: 0,
+            // Resolve credentials for the candidate, rather than reuse the paid provider's key.
+            apiKey: candidate.provider === model.provider ? options?.apiKey : void 0
+          })));
+          const iterator = response[Symbol.asyncIterator]();
+          while (true) {
+            const next = await wait(iterator.next());
+            if (next.done) throw new Error("The model returned no response");
+            const event = next.value;
+            if (event.type === "error") {
+              failure = event.error;
+              throw new Error(event.error.errorMessage || "The model failed to respond");
+            }
+            if (event.type === "done") {
+              if (event.reason !== "deferred" && !event.message.content.some(
+                (part) => part.type === "toolCall" || part.type === "text" && part.text.trim()
+              )) throw new Error("The model returned an empty response");
+              output.push(event);
+              output.end();
+              return;
+            }
+            if (event.type === "start") {
+              if (started) continue;
+              started = true;
+            }
+            output.push(event);
+          }
+        } catch (error) {
+          controller.abort();
+          if (!options?.signal?.aborted && index + 1 < candidates.length) {
+            usingFallback = true;
+            onFallback();
+            continue;
+          }
+          const aborted = Boolean(options?.signal?.aborted);
+          const detail = error instanceof Error ? error.message : String(error);
+          const errorMessage = candidate.provider === "openrouter" && candidate.id === "openrouter/free" && detail.includes("allowed-providers") ? "Free-model fallback is blocked by your OpenRouter allowed providers. Enable a provider serving free models at https://openrouter.ai/settings/privacy, then retry." : detail;
+          const message = {
+            role: "assistant",
+            content: [],
+            api: candidate.api,
+            provider: candidate.provider,
+            model: candidate.id,
+            usage: failure?.usage ?? {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+            },
+            stopReason: aborted ? "aborted" : "error",
+            errorMessage: aborted ? "Reply stopped" : errorMessage,
+            timestamp: Date.now()
+          };
+          output.push({ type: "error", reason: aborted ? "aborted" : "error", error: message });
+          output.end();
+          return;
+        }
+      }
+    })();
+    return output;
+  };
+}
+
+// src/bash.ts
+import { createBashToolDefinition } from "@earendil-works/pi-coding-agent";
+function createSandboxBashTool(cwd2) {
+  const tool = createBashToolDefinition(cwd2);
+  return {
+    ...tool,
+    renderCall: void 0,
+    renderResult: void 0,
+    async execute(...[callId, params, signal, onUpdate, context]) {
+      if (/\bpkill\b[^;&|\n]*(?:\s-[a-z]*f[a-z]*\b|\s--full\b)/i.test(params.command)) {
+        throw new Error("pkill -f can stop the agent runtime. Stop only the web server's recorded PID with kill <pid>, or reuse the running server.");
+      }
+      return tool.execute(callId, { ...params, timeout: params.timeout ?? 60 }, signal, onUpdate, context);
+    }
+  };
+}
 
 // src/pi.ts
 var PiSessionRegistry = class {
@@ -512,6 +666,10 @@ var PiSessionRegistry = class {
         } else if (llm2.providerId === "openai") {
           await runtime.setRuntimeApiKey("openai", llm2.apiKey);
         }
+        const openrouterKey = this.config.openrouterApiKey ?? process.env.OPENROUTER_API_KEY;
+        if (llm2.providerId !== OPENROUTER_PROVIDER_ID && openrouterKey) {
+          await runtime.setRuntimeApiKey(OPENROUTER_PROVIDER_ID, openrouterKey);
+        }
         return runtime;
       })();
     }
@@ -535,6 +693,15 @@ var PiSessionRegistry = class {
       };
     }
     return model;
+  }
+  async resourceLoader() {
+    const loader = new DefaultResourceLoader({
+      cwd: this.config.cwd,
+      agentDir: this.config.agentDir,
+      appendSystemPromptOverride: (base) => [...base, previewSystemPrompt(this.config.previewPort)]
+    });
+    await loader.reload();
+    return loader;
   }
   async listSessions() {
     const sessions = await SessionManager.list(this.config.cwd);
@@ -571,7 +738,8 @@ var PiSessionRegistry = class {
       agentDir: this.config.agentDir,
       modelRuntime,
       model,
-      customTools: [createPreviewTool(this.config.previewPort)],
+      resourceLoader: await this.resourceLoader(),
+      customTools: [createPreviewTool(this.config.previewPort), createSandboxBashTool(this.config.cwd)],
       sessionManager: SessionManager.create(this.config.cwd)
     });
     const id = session.sessionId;
@@ -581,7 +749,7 @@ var PiSessionRegistry = class {
       } catch {
       }
     }
-    this.track(session);
+    this.track(session, modelRuntime);
     return { id };
   }
   async openSession(sessionId) {
@@ -610,10 +778,11 @@ var PiSessionRegistry = class {
       agentDir: this.config.agentDir,
       modelRuntime,
       model,
-      customTools: [createPreviewTool(this.config.previewPort)],
+      resourceLoader: await this.resourceLoader(),
+      customTools: [createPreviewTool(this.config.previewPort), createSandboxBashTool(this.config.cwd)],
       sessionManager: SessionManager.open(match.path)
     });
-    this.track(session);
+    this.track(session, modelRuntime);
     return { id: session.sessionId };
   }
   getOrThrow(sessionId) {
@@ -635,8 +804,11 @@ var PiSessionRegistry = class {
     if (entry.prompting || !entry.session.isIdle) {
       throw new Error("The agent is still replying. Wait for it to finish or stop the current reply.");
     }
+    const llm2 = this.resolveLlm();
     entry.prompting = true;
-    this.emit(entry, { type: "run.start" });
+    entry.model = llm2.modelId;
+    entry.provider = llm2.providerId;
+    this.emit(entry, { type: "run.start", model: entry.model, provider: entry.provider });
     try {
       await entry.session.prompt(content);
     } catch (err) {
@@ -681,7 +853,9 @@ var PiSessionRegistry = class {
       messageCount: entry.session.messages.length,
       messages: entry.session.messages,
       running: this.isRunning(sessionId),
-      streamingMessage: entry.session.agent.state.streamingMessage
+      streamingMessage: entry.session.agent.state.streamingMessage,
+      model: entry.model ?? this.resolveLlm().modelId,
+      provider: entry.provider ?? this.resolveLlm().providerId
     };
   }
   disposeSession(sessionId) {
@@ -696,13 +870,28 @@ var PiSessionRegistry = class {
       this.disposeSession(id);
     }
   }
-  track(session) {
+  track(session, runtime) {
     const id = session.sessionId;
     const entry = {
       session,
       listeners: /* @__PURE__ */ new Set(),
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
     };
+    const llm2 = this.resolveLlm();
+    const openrouterKey = llm2.providerId === OPENROUTER_PROVIDER_ID ? llm2.apiKey : this.config.openrouterApiKey ?? process.env.OPENROUTER_API_KEY;
+    const fallback = openrouterKey && runtime.getModel(OPENROUTER_PROVIDER_ID, "openrouter/free");
+    if (fallback) {
+      session.agent.streamFunction = withModelFallback(session.agent.streamFunction, fallback, () => {
+        entry.model = fallback.id;
+        entry.provider = fallback.provider;
+        this.emit(entry, {
+          type: "model.fallback",
+          model: fallback.id,
+          provider: fallback.provider,
+          message: "The primary model could not respond. Continuing with a free model."
+        });
+      });
+    }
     entry.unsubscribe = session.subscribe((event) => {
       for (const mapped of mapPiEvent(event)) {
         if (mapped.type === "run.end" && entry.prompting) continue;
@@ -861,6 +1050,7 @@ app.get(
   (c) => c.json({
     ok: true,
     multiProject: true,
+    runtimeVersion: RUNTIME_VERSION,
     cwd,
     agentDir,
     provider: llm.providerId,

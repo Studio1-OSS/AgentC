@@ -1,18 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { getSignedCookie, setSignedCookie } from "hono/cookie";
+import { getCookie, getSignedCookie, setCookie, setSignedCookie } from "hono/cookie";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthVariables } from "../middleware/auth.js";
 import type { EnvironmentService } from "../services/environments.js";
 import { createProjectRoutes, requirePublicGitHubRepo } from "./projects.js";
-import { verifyUiToken } from "../ui-tokens.js";
+import { verifyUiToken, type UiTokenPayload } from "../ui-tokens.js";
 
-/** Guest workspaces belong to a signed browser cookie, never a client-supplied user ID. */
+/** Browser ownership comes from its guest cookie or a grant for one linked workspace. */
 export function createBrowserRoutes(
   service: EnvironmentService,
   secret: string,
 ) {
-  const app = new Hono<{ Variables: AuthVariables }>();
+  const app = new Hono<{ Variables: AuthVariables & { workspaceGrant: UiTokenPayload | null } }>();
   app.use("*", bodyLimit({ maxSize: 8192 }));
   app.use("*", async (c, next) => {
     c.header("Cache-Control", "no-store");
@@ -23,14 +23,19 @@ export function createBrowserRoutes(
       }
     }
     const authorization = c.req.header("authorization");
-    if (authorization) {
-      const payload = authorization.startsWith("Bearer ") ? verifyUiToken(authorization.slice(7), secret) : null;
-      const match = c.req.path.match(/^(?:\/ui\/api)?\/environments\/([^/]+)\/projects(?:\/|$)/);
-      if (!payload || match?.[1] !== payload.environmentId) {
-        return c.json({ error: "Chat token cannot access this workspace" }, 403);
-      }
+    const token = authorization
+      ? authorization.startsWith("Bearer ") ? authorization.slice(7) : ""
+      : getCookie(c, "cloud_agent_workspace") ?? "";
+    const payload = verifyUiToken(token, secret);
+    c.set("workspaceGrant", payload);
+    const match = c.req.path.match(/^(?:\/ui\/api)?\/environments\/([^/]+)(?:\/|$)/);
+    const listing = ["GET", "HEAD"].includes(c.req.method) && /^(?:\/ui\/api)?\/environments\/?$/.test(c.req.path);
+    if (payload && (match?.[1] === payload.environmentId || (authorization && listing))) {
       c.set("userId", payload.userId);
       return next();
+    }
+    if (authorization) {
+      return c.json({ error: "Chat token cannot access this workspace" }, 403);
     }
     let userId = await getSignedCookie(c, secret, "cloud_agent_guest");
     if (!userId) {
@@ -49,10 +54,36 @@ export function createBrowserRoutes(
     await next();
   });
   app.onError((err, c) => c.json({ error: err.message }, 400));
+  app.get("/bootstrap", async (c) => {
+    const token = c.req.query("t") ?? c.req.query("token") ?? "";
+    try {
+      const data = await service.getUiBootstrap(token);
+      const workspaceToken = data.token ?? token;
+      const payload = verifyUiToken(workspaceToken, secret);
+      if (!payload) throw new Error("invalid or expired UI token");
+      // Keep the link's workspace grant separate from this browser's guest identity.
+      setCookie(c, "cloud_agent_workspace", workspaceToken, {
+        httpOnly: true,
+        sameSite: "Lax",
+        path: "/ui",
+        maxAge: Math.max(1, Math.ceil((payload.exp - Date.now()) / 1000)),
+        secure: c.req.url.startsWith("https:") || c.req.header("x-forwarded-proto") === "https",
+      });
+      return c.json(data);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 401);
+    }
+  });
   app.route("/environments", createProjectRoutes(service, true));
-  app.get("/environments", async (c) =>
-    c.json({ environments: await service.list(c.get("userId")) }),
-  );
+  app.get("/environments", async (c) => {
+    const grant = c.get("workspaceGrant");
+    const environments = c.req.header("authorization") ? [] : await service.list(c.get("userId"));
+    if (grant) {
+      const shared = await service.get(grant.userId, grant.environmentId);
+      if (shared && !environments.some((environment) => environment.id === shared.id)) environments.push(shared);
+    }
+    return c.json({ environments });
+  });
   app.post("/environments", async (c) => {
     const body = await c.req.json();
     if (body.repoUrl) requirePublicGitHubRepo(body.repoUrl);

@@ -9,6 +9,8 @@ import type { ServerEvent } from "@cloud-agent/protocol";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   createAgentSession: vi.fn(),
+  createBashToolDefinition: vi.fn(() => ({ name: "bash", execute: vi.fn() })),
+  DefaultResourceLoader: vi.fn(function () { return { reload: vi.fn() }; }),
   ModelRuntime: { create: vi.fn() },
   SessionManager: { create: vi.fn(), open: vi.fn(), list: vi.fn() },
 }));
@@ -28,7 +30,7 @@ async function setup() {
     prompt: vi.fn(async () => {}), steer: vi.fn(), followUp: vi.fn(), abort: vi.fn(), dispose: vi.fn(),
     subscribe: vi.fn((fn: typeof listener) => { listener = fn; return () => {}; }),
   };
-  vi.mocked(ModelRuntime.create).mockResolvedValue({ getModel: () => ({ maxTokens: 8192, contextWindow: 100_000 }), setRuntimeApiKey: vi.fn() } as never);
+  vi.mocked(ModelRuntime.create).mockResolvedValue({ getModel: (_provider: string, id: string) => id === "openrouter/free" ? undefined : ({ maxTokens: 8192, contextWindow: 100_000 }), setRuntimeApiKey: vi.fn() } as never);
   vi.mocked(createAgentSession).mockResolvedValue({ session: session as unknown as AgentSession } as never);
   const registry = new PiSessionRegistry({ cwd: dir, agentDir: dir, llm: { providerId: "openrouter", modelId: "test", apiKey: "test" } });
   await registry.createSession();

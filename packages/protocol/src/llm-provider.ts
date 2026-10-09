@@ -148,6 +148,10 @@ export function buildSandboxModelEnv(
   if (config.providerId === NEBIUS_PROVIDER_ID && config.baseUrl) {
     out.NEBIUS_BASE_URL = config.baseUrl;
   }
+  if (env.OPENROUTER_API_KEY) {
+    out.OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
+    out.OPENROUTER_BASE_URL = env.OPENROUTER_BASE_URL?.trim() || DEFAULT_OPENROUTER_BASE_URL;
+  }
 
   return out;
 }

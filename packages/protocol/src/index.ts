@@ -105,6 +105,8 @@ export const ServerEventSchema = z.discriminatedUnion("type", [
     running: z.boolean().optional(),
     messages: z.array(z.unknown()).optional(),
     streamingMessage: z.unknown().optional(),
+    model: z.string().optional(),
+    provider: z.string().optional(),
   }),
   z.object({
     type: z.literal("message.start"),
@@ -144,6 +146,14 @@ export const ServerEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("run.start"),
+    model: z.string().optional(),
+    provider: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("model.fallback"),
+    model: z.string(),
+    provider: z.string(),
+    message: z.string(),
   }),
   z.object({
     type: z.literal("run.end"),
@@ -195,6 +205,8 @@ export const PreviewResponseSchema = z.object({
 });
 export type PreviewResponse = z.infer<typeof PreviewResponseSchema>;
 
+/** Minimum runtime version providing automatic preview instructions and free-model fallback. */
+export const RUNTIME_VERSION = 3;
 /** Default ports. */
 export const DEFAULT_RUNTIME_PORT = 4096;
 export const DEFAULT_WEB_PREVIEW_PORT = 3000;

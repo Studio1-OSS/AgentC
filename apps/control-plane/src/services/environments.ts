@@ -17,6 +17,7 @@ import {
   ProjectIdSchema,
   SessionRequestSchema,
   DEFAULT_WEB_PREVIEW_PORT,
+  RUNTIME_VERSION,
   buildSandboxModelEnv,
   type EnvironmentStatus,
 } from "@cloud-agent/protocol";
@@ -211,7 +212,7 @@ export class EnvironmentService {
           method: "GET",
           runtimeAccessToken: this.config.runtimeAccessSecret,
         });
-        if (!health.ok || !(await health.json() as { multiProject?: boolean }).multiProject) {
+        if (!health.ok || (await health.json() as { runtimeVersion?: number }).runtimeVersion !== RUNTIME_VERSION) {
           throw new Error("Sandbox runtime needs an upgrade");
         }
       } catch {

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { EnvironmentService } from "./environments.js";
 import { SandboxClient } from "@cloud-agent/sandbox-client";
-import { WEB_PREVIEW_CONFIG_PATH } from "@cloud-agent/protocol";
+import { WEB_PREVIEW_CONFIG_PATH, RUNTIME_VERSION } from "@cloud-agent/protocol";
 import { createDatabase, migrateDatabase } from "@cloud-agent/database";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -188,5 +188,8 @@ it("upgrades a healthy legacy runtime on resume and keeps a current runtime", as
   expect(deployAndStartRuntime).toHaveBeenCalledWith(sandbox, expect.objectContaining({ runtimeAccessToken: "secret" }));
   fetchRuntime.mockResolvedValueOnce(Response.json({ ok: true, multiProject: true }));
   await service.start("owner", "workspace");
-  expect(deployAndStartRuntime).toHaveBeenCalledOnce();
+  expect(deployAndStartRuntime).toHaveBeenCalledTimes(2);
+  fetchRuntime.mockResolvedValueOnce(Response.json({ ok: true, multiProject: true, runtimeVersion: RUNTIME_VERSION }));
+  await service.start("owner", "workspace");
+  expect(deployAndStartRuntime).toHaveBeenCalledTimes(2);
 });

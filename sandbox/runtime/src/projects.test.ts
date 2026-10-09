@@ -8,6 +8,8 @@ import { ProjectRegistries } from "./projects.js";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   createAgentSession: vi.fn(), ModelRuntime: { create: vi.fn() },
+  createBashToolDefinition: vi.fn(() => ({ name: "bash", execute: vi.fn() })),
+  DefaultResourceLoader: vi.fn(function () { return { reload: vi.fn() }; }),
   SessionManager: { create: vi.fn(), open: vi.fn(), list: vi.fn() },
 }));
 let directory: string;
