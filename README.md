@@ -1,146 +1,353 @@
 # cloud-agent
 
-Remote Pi coding-agent environments inside Daytona sandboxes — with a browser workspace dashboard and an optional CLI.
+Remote [Pi](https://github.com/badlogic/pi-mono) coding-agent environments inside [Daytona](https://www.daytona.io) sandboxes, with a browser workspace dashboard and an optional CLI.
 
-Each environment gets its own isolated sandbox. Pi runs **inside** the sandbox. The control plane owns lifecycle, auth, and routing; conversation state stays in Pi session files on the sandbox filesystem.
+Each environment is one isolated sandbox. Pi runs inside that sandbox. This repository's control plane creates sandboxes, stores workspace metadata, and proxies chat. Conversation transcripts stay in Pi session files on the sandbox filesystem.
 
-See [PLAN.md](./PLAN.md) for the full architecture.
+The longer design rationale is in [PLAN.md](./PLAN.md). This file is the setup and architecture guide for running the service.
 
-## Monorepo layout
+## Architecture
 
 ```
-apps/cli/               cloud-agent CLI (open / list / stop / resume)
-apps/web/               Workspace dashboard + agent chat (served at /ui/)
-apps/control-plane/     HTTP API + UI token + WS proxy
-packages/protocol/      Shared Zod schemas + WS event types
-packages/database/      SQLite schema
-packages/sandbox-client/ Daytona lifecycle wrapper
-sandbox/runtime/        Pi SDK HTTP + WebSocket service (runs inside each sandbox)
+Browser  ──HTTPS / WebSocket──►  Control plane  ──Daytona API──►  Sandbox
+   ▲                                    │                              │
+   │                                    │ SQLite                       │
+   │                                    ▼                              │
+   │                              users, environments,                 │
+   │                              projects, session ids                │
+   │                                                                   │
+   │                          Signed preview (port 3000+)              │
+   └───────────────────────────────────────────────────────────────────┘
+
+CLI ──Bearer API key──► Control plane
 ```
+
+| Piece | Where it runs | What it owns |
+| --- | --- | --- |
+| Web dashboard (`apps/web`) | Built files served by the control plane at `/ui/` | Workspace list, chat, tool cards, preview links |
+| Control plane (`apps/control-plane`) | Your server, one Node process | Auth, SQLite, sandbox lifecycle, chat proxy |
+| CLI (`apps/cli`) | A developer machine | Create, list, stop, resume, and open a chat link |
+| Protocol (`packages/protocol`) | Shared library | Request schemas, WebSocket events, LLM provider selection |
+| Database (`packages/database`) | Control-plane process | SQLite schema and startup migration |
+| Sandbox client (`packages/sandbox-client`) | Control-plane process | Daytona create/start/stop, repo clone, runtime upload |
+| Sandbox runtime (`sandbox/runtime`) | Inside each Daytona sandbox | Pi SDK, session router, preview checks |
+
+### What happens when someone creates a workspace
+
+1. The browser (or CLI) asks the control plane to create an environment. The browser accepts a public `https://github.com/owner/repo` URL, `owner/repo`, or an empty workspace, plus an optional branch.
+2. The control plane writes a row in SQLite and asks Daytona for a sandbox. Without `DAYTONA_SNAPSHOT`, that sandbox is a `node:22-bookworm` image with 2 CPUs, 4 GB RAM, and 10 GB disk. Idle sandboxes stop after 60 minutes; the filesystem remains.
+3. The sandbox clones the repository into `/home/daytona/workspace/project`, or runs `git init` for an empty workspace.
+4. The control plane uploads `sandbox/runtime/deploy` (produced by `pnpm build`), runs `npm install` inside the sandbox, and starts `node server.js` on port `4096`.
+5. The runtime starts Pi against the configured model. Pi's reads, edits, and shell commands are local to the sandbox.
+6. The control plane asks Daytona for a signed HTTPS preview of port `3000` (24 hours) and stores it in the sandbox for the agent. Additional projects in the same sandbox get the next free preview port.
+
+### What happens during chat
+
+The browser opens `wss://<your-host>/ui/ws?token=…`. The control plane checks that short-lived UI token, then opens its own WebSocket to the sandbox runtime through Daytona's preview link for port `4096`. The browser never receives the Daytona API key, the runtime access token, or the model API key.
+
+Pi session JSONL files live under `/home/daytona/.pi/agent` inside the sandbox. SQLite only stores environment metadata and pointers to those session ids. Stopping a sandbox keeps the files. Resuming starts the sandbox again, redeploys the runtime when its version is older than this build, and refreshes preview links.
+
+### Accounts and limits in this version
+
+The dashboard identifies a browser with a signed HttpOnly cookie (`cloud_agent_guest`) that lasts 30 days. Clearing cookies drops access to the workspaces that cookie owned. There is no user login and no cross-device account. A browser can keep five workspaces. Opening a valid chat link stores a separate cookie for that one workspace until the token expires (12 hours).
+
+The HTTP API uses `Authorization: Bearer <CONTROL_PLANE_API_KEY>` and an optional `X-User-Id`. That API does not apply the five-workspace browser cap. Treat the API key as an admin credential.
 
 ## Prerequisites
 
-- Node.js ≥ 22.19
-- pnpm 9+
-- Daytona API key ([dashboard](https://app.daytona.io))
-- OpenRouter API key (`OPENROUTER_API_KEY`) — preferred for Daytona (allowlisted)
+On the machine that will run the control plane:
 
-Recommended `.env` for Daytona sandboxes:
+- Linux or macOS with outbound HTTPS
+- Node.js **22.19.0 or newer** (`node -v`)
+- pnpm **9.15.0** (the version in `package.json`'s `packageManager` field)
+- `git`, `curl`, and `ca-certificates`
+- A C/C++ toolchain and Python 3, so `better-sqlite3` can compile during `pnpm install` (`build-essential` and `python3` on Debian/Ubuntu)
+- A Daytona account and API key
+- An OpenRouter API key
+
+Daytona sandboxes also need outbound access to GitHub, `registry.npmjs.org`, and `openrouter.ai`. That egress is from Daytona's network, not from your server.
+
+## 1. Install Node and pnpm
+
+Debian/Ubuntu packages for the native module build:
 
 ```bash
-PI_PROVIDER=openrouter
-PI_MODEL=qwen/qwen3-235b-a22b-2507  # supports agent tool calls
-OPENROUTER_API_KEY=…
-DAYTONA_API_KEY=…
+sudo apt-get update
+sudo apt-get install -y git curl ca-certificates python3 make g++ build-essential
 ```
 
-Choose a model that supports tool calls; chat-only models can print commands without executing them. The included configuration uses [Qwen3 235B via OpenRouter](https://openrouter.ai/qwen/qwen3-235b-a22b-2507). Check your OpenRouter [allowed providers](https://openrouter.ai/settings/privacy) if inference reports that no endpoint is available.
-
-If the primary model errors, returns an empty reply, or stops producing model events for 45 seconds, the agent automatically retries that request with [OpenRouter's free router](https://openrouter.ai/openrouter/free). The router selects free models that support the request's tools. Completed tool work and the conversation stay intact; chat shows the switch and the active model. The agent keeps using free models for the rest of that run and tries the configured primary model again on the next prompt. Fallback requires `OPENROUTER_API_KEY`, including when another provider is primary, and your [allowed providers](https://openrouter.ai/settings/privacy) must permit providers serving free models. Free models have their own availability and rate limits; if fallback also fails, chat shows the error and remains usable. Stop cancels the current request without triggering fallback.
-
-## Setup
+Install Node 22.19 or newer, then activate the repo's pnpm version:
 
 ```bash
-cp .env.example .env
-# fill DAYTONA_API_KEY and OPENROUTER_API_KEY
+corepack enable
+corepack prepare pnpm@9.15.0 --activate
+node -v
+pnpm -v
+```
 
+If you later change the Node version, run `pnpm rebuild better-sqlite3` in this repo before starting the server again.
+
+## 2. Create the third-party accounts
+
+**Daytona.** Sign in at [app.daytona.io](https://app.daytona.io) and create an API key. The account needs quota for each live sandbox (2 CPUs, 4 GB RAM, 10 GB disk on the default image). Optional: note a target region if you want sandboxes created in a specific Daytona target, and a snapshot name if you publish `sandbox/Dockerfile` yourself.
+
+**OpenRouter.** Create an API key at [openrouter.ai](https://openrouter.ai). Use a model that supports tool calls. The default is [`qwen/qwen3-235b-a22b-2507`](https://openrouter.ai/qwen/qwen3-235b-a22b-2507). In OpenRouter's [allowed providers](https://openrouter.ai/settings/privacy) setting, allow the providers that serve that model. Daytona Tier 1 and Tier 2 sandboxes can reach `openrouter.ai`. Nebius Token Factory is not reachable from those tiers, so leave `PI_PROVIDER=openrouter` unless you have confirmed another provider from inside a sandbox.
+
+If the primary model errors, returns an empty reply, or stops producing model events for 45 seconds, the runtime retries that request through [OpenRouter's free router](https://openrouter.ai/openrouter/free). Fallback needs `OPENROUTER_API_KEY` even when another provider is primary, and your allowed providers must include providers that serve free models. The conversation and completed tool work stay in place. The next user prompt tries the configured primary model again. Free models have their own availability and rate limits.
+
+## 3. Configure the environment
+
+```bash
+git clone git@github.com:Studio1-OSS/cloud-agent.git
+cd cloud-agent
+cp .env.example .env
+```
+
+Generate three independent secrets and paste them into `.env`:
+
+```bash
+openssl rand -hex 32   # CONTROL_PLANE_API_KEY
+openssl rand -hex 32   # RUNTIME_ACCESS_SECRET
+openssl rand -hex 32   # BROWSER_SESSION_SECRET
+```
+
+Then set the provider keys:
+
+```bash
+DAYTONA_API_KEY=...
+OPENROUTER_API_KEY=...
+PI_PROVIDER=openrouter
+PI_MODEL=qwen/qwen3-235b-a22b-2507
+```
+
+On a server, set `DATABASE_URL` to an absolute path. The value in `.env.example` (`file:./data/cloud-agent.db`) is resolved from the process working directory, which changes if you start the app with `pnpm --filter`.
+
+```bash
+mkdir -p /var/lib/cloud-agent
+# in .env:
+DATABASE_URL=file:/var/lib/cloud-agent/cloud-agent.db
+```
+
+Keep `BROWSER_SESSION_SECRET` and `RUNTIME_ACCESS_SECRET` stable. Changing the browser secret signs every browser out. Changing the runtime secret no longer matches sandboxes that are already running; the next chat redeploys the runtime with the new secret. Back up the SQLite file. This process is the only writer; do not point two control planes at the same database.
+
+| Variable | Required | Role |
+| --- | --- | --- |
+| `PORT` | no (default `8787`) | HTTP and WebSocket port |
+| `HOST` | no (default `0.0.0.0`) | Bind address |
+| `CONTROL_PLANE_API_KEY` | yes on a shared server | Bearer token for `/environments` and the CLI |
+| `DATABASE_URL` | yes | SQLite file URL. Use an absolute `file:` path on a server |
+| `BROWSER_SESSION_SECRET` | yes | Signs guest cookies and chat tokens. Falls back to `RUNTIME_ACCESS_SECRET` if empty |
+| `RUNTIME_ACCESS_SECRET` | yes | Bearer token injected into each sandbox runtime |
+| `DAYTONA_API_KEY` | yes | Daytona API credential |
+| `DAYTONA_API_URL` | no | Default `https://app.daytona.io/api` |
+| `DAYTONA_TARGET` | no | Daytona target/region. Empty uses the account default |
+| `DAYTONA_SNAPSHOT` | no | Prebuilt snapshot name. Empty uses `node:22-bookworm` |
+| `OPENROUTER_API_KEY` | yes for the default setup | Model access and free-model fallback |
+| `OPENROUTER_BASE_URL` | no | Default `https://openrouter.ai/api/v1` |
+| `PI_PROVIDER` | no | `openrouter` (default when its key is set), `anthropic`, `openai`, or `nebius` |
+| `PI_MODEL` | no | Provider model id. Must support tool calls |
+| `OPENROUTER_HTTP_REFERER` | no | OpenRouter `HTTP-Referer` header. Default `https://cloud-agent.local` |
+| `OPENROUTER_APP_TITLE` | no | OpenRouter `X-Title` header. Default `cloud-agent` |
+| `RUNTIME_PORT` | no | Port Pi's runtime listens on inside the sandbox. Default `4096` |
+| `WORKSPACE_PATH` | no | Default `/home/daytona/workspace/project` |
+| `PI_AGENT_DIR` | no | Default `/home/daytona/.pi/agent` |
+| `RUNTIME_BUNDLE_DIR` | no | Local directory uploaded into sandboxes. Default `sandbox/runtime`, which resolves to `sandbox/runtime/deploy` after a build |
+| `CLOUD_AGENT_URL` | CLI only | Control plane URL. Default `http://127.0.0.1:8787` |
+| `CLOUD_AGENT_USER_ID` | CLI only | `X-User-Id` for API calls. Default `default-user` |
+| `NEBIUS_API_KEY` | no | Only if `PI_PROVIDER=nebius` and the sandbox can reach Nebius |
+| `ANTHROPIC_API_KEY` | no | Used when it is the selected provider |
+| `OPENAI_API_KEY` | no | Used when it is the selected provider |
+
+`.env` is loaded from the repository root regardless of the process working directory. Do not commit it.
+
+## 4. Install and build
+
+From the repository root:
+
+```bash
 pnpm install
 pnpm build
 ```
 
-## Web app
+`pnpm build` compiles every package and app, writes the web UI to `apps/web/dist`, and writes the sandbox upload bundle to `sandbox/runtime/deploy` (`server.js` plus a concrete `package.json`). Creating a workspace fails until that deploy bundle exists.
+
+The control plane creates the SQLite file and applies migrations on startup. `pnpm db:migrate` is available, but it only sees `DATABASE_URL` when that variable is already exported in the shell; it does not read `.env` by itself.
+
+## 5. Start the server
+
+From the repository root, so relative paths stay predictable:
 
 ```bash
-pnpm build
+node apps/control-plane/dist/index.js
+```
+
+Equivalent after a build, if `DATABASE_URL` is absolute:
+
+```bash
 pnpm --filter @cloud-agent/control-plane start
 ```
 
-Open **http://127.0.0.1:8787/**. Paste a public GitHub URL (or `owner/repo`), optionally choose a branch, and click **Create workspace**. The app creates a Daytona sandbox, clones the repository, and opens the remote agent chat automatically. You can also start empty.
-
-Agent replies render Markdown with highlighted code and copying, tables, task lists, links, and images. Tool cards show arguments, streamed output, errors, and edit diffs; reasoning is collapsible.
-
-Every new or resumed sandbox gets a [Daytona signed web preview](https://www.daytona.io/docs/en/preview/) for port **3000**; ngrok and extra tunnel credentials are unnecessary. The agent's system prompt requires it to automatically run created or updated web apps and visual artifacts in the background on `0.0.0.0:3000`, call its `preview` tool to check server readiness and the preview hostname, and share the resulting HTTPS link rather than localhost. Chat keeps a verified **Open preview** action in its header as well as on successful preview tool cards. Vite apps must allow the preview proxy domain. Links last 24 hours and are refreshed when you reopen the chat or resume the sandbox; the app server must keep running for a preview to work. Sandbox control ports remain private. After deploying this update, stop/resume existing workspaces once to upgrade their runtime and apply the new prompt to reopened conversations.
-
-Chat reconnects automatically after connection loss and restores both the transcript and any reply in progress. The running indicator stays active through provider retries until Pi finishes. If reconnect attempts fail, use **Reconnect**; **Stop** remains available during a connected active run.
-
-Server startup and preview checks run in order, with brief readiness retries. The agent detaches web servers and records their PIDs; broad `pkill -f` commands are rejected because they can kill the agent runtime itself. Shell commands default to a 60-second timeout unless a different timeout is supplied. After an interrupted run or runtime restart, unfinished tool cards show an interruption instead of remaining stuck on Running.
-
-The dashboard lists this browser's workspaces with open, stop, resume, and delete actions. Returning to a workspace resumes its most recently opened conversation, including the transcript. No CLI, API key entry, or token link is needed.
-
-Inside a workspace, use **New project** to add a public GitHub repository or an empty project to the existing sandbox. The **Project** picker switches between them. Each project has its own working directory, conversation history, and web preview port; the original project and its existing sessions stay in place. Use **New chat** to start a fresh conversation within a project, and the **Conversation** picker to reopen previous chats. Switching conversations leaves active replies running. Projects share sandbox compute and filesystem access, and stopping the sandbox stops all of them. After deploying this update, stop/resume an older workspace once to enable project management in its runtime.
-
-Guest ownership uses a signed HttpOnly cookie lasting 30 days. Clearing cookies loses access to those workspaces; this version does not provide account login or cross-device access. A guest can keep up to five workspaces. This is a browser guest MVP; account authentication and deployment-wide usage limits are still needed for an unrestricted public service.
-
-Opening a valid chat link also remembers that link's workspace in a separate HttpOnly cookie until the token expires. It appears alongside this browser's workspaces and supports resume and sandbox controls, without granting access to the link owner's other workspaces.
-
-For frontend development, run `pnpm dev:control-plane` and `pnpm dev:web`, then open http://localhost:5173/ui/.
-
-## CLI (browser chat — no JSON)
+Check liveness:
 
 ```bash
-# link the CLI globally from this repo
+curl -sf http://127.0.0.1:8787/health
+```
+
+Open `http://127.0.0.1:8787/`. The root path redirects to `/ui/`. Paste a public GitHub repository (or leave it empty) and choose **Create workspace**. The first sandbox takes several minutes: Daytona creates the machine, the repo is cloned, and the runtime's npm dependencies install inside the sandbox. Later stop/resume cycles reuse the sandbox filesystem and only redeploy the runtime when the running copy is unhealthy or older than `RUNTIME_VERSION`.
+
+A missing web build serves a 503 on `/ui/` that tells you to build `@cloud-agent/web`. A missing `DAYTONA_API_KEY` still lets `/health` succeed; creating a workspace fails until the key is set.
+
+### Keep it running
+
+Example systemd unit. Replace the Node path with `command -v node` on that machine (nvm and corepack shims are often absent from service environments):
+
+```ini
+[Unit]
+Description=cloud-agent control plane
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/cloud-agent
+EnvironmentFile=/opt/cloud-agent/.env
+ExecStart=/usr/bin/node apps/control-plane/dist/index.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`EnvironmentFile` and the app's own `.env` load can both exist. Variables already present in the environment win over `.env`.
+
+### Put HTTPS in front
+
+Serve the site on one origin. The dashboard and `/ui/api` must share a host: browser mutations are rejected when the `Origin` host and the `Host` header differ. Proxy WebSocket upgrades for `/ui/ws`, and forward the public host so cookies and that origin check see the name the browser used.
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name agent.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+    }
+}
+```
+
+`X-Forwarded-Proto: https` marks guest and workspace cookies `Secure`. Set `OPENROUTER_HTTP_REFERER` to the public `https://` origin if you want OpenRouter rankings attributed to your host.
+
+Inbound traffic is only the control plane port (or 443 on the proxy). The server calls Daytona over outbound HTTPS. Sandbox ports are not published on this machine.
+
+## 6. Optional checks
+
+```bash
+pnpm typecheck
+pnpm test
+```
+
+`pnpm spike` creates a real Daytona sandbox, clones a repository, deploys the runtime, and prompts the model. It spends Daytona and model quota. The script deletes that sandbox when it finishes. Pass `--keep` to leave it, and `--repo` to choose the clone:
+
+```bash
+pnpm --filter @cloud-agent/sandbox-runtime build
+pnpm spike -- --repo https://github.com/expressjs/express.git
+```
+
+## Frontend development
+
+Run the API and the Vite dev server in two terminals, after `pnpm build` has produced `sandbox/runtime/deploy` at least once:
+
+```bash
+pnpm dev:control-plane
+pnpm dev:web
+```
+
+Open http://localhost:5173/ui/. Vite proxies `/ui/api` and `/ui/ws` to `127.0.0.1:8787` and keeps the browser on the Vite origin, which is what the control plane's same-origin check expects.
+
+Rebuild `sandbox/runtime` after runtime changes. Existing sandboxes pick up a new bundle on stop/resume when `runtimeVersion` no longer matches, and also when the control plane has to recover a dead runtime process.
+
+## CLI
+
+The CLI talks to a control plane. It can auto-start a local one when `CLOUD_AGENT_URL` is down and this repo is present. Point `CLOUD_AGENT_URL` at a remote server when the control plane runs elsewhere, and use the same `CONTROL_PLANE_API_KEY`.
+
+```bash
 pnpm --filter @cloud-agent/cli build
 pnpm --filter @cloud-agent/cli link --global
 
-# start control plane (in another terminal), or let `open` auto-start it
-pnpm --filter @cloud-agent/control-plane start
-
-# create a remote sandbox + open Pi chat in the browser
 cloud-agent open https://github.com/expressjs/express.git
-
-# or empty workspace
 cloud-agent open --empty --name scratch
-
 cloud-agent list
 cloud-agent resume <env-id>
 cloud-agent stop <env-id>
 cloud-agent rm <env-id>
 ```
 
-The CLI creates the environment, waits until ready, mints a short-lived UI token, and opens `/ui/?t=…`. The browser never receives Daytona or OpenRouter keys — chat WebSocket traffic is proxied by the control plane.
+`open` waits until the environment is ready, mints a chat link, and opens `/ui/?t=…`. `--no-open` prints the URL instead. `--branch` and `--name` set the clone branch and display name.
 
-## Control plane + API
+A copy of the CLI config can also live in `~/.cloud-agent/config.env` (`CLOUD_AGENT_URL`, `CONTROL_PLANE_API_KEY`, `CLOUD_AGENT_USER_ID`). The repo `.env` is loaded first.
 
-```bash
-pnpm dev:control-plane
-# → http://127.0.0.1:8787
-# chat UI → http://127.0.0.1:8787/ui/
-```
+## Using the product
 
-Auth (API): `Authorization: Bearer <CONTROL_PLANE_API_KEY>` and optional `X-User-Id`.
+- Repositories from the dashboard must be public GitHub HTTPS URLs (`https://github.com/owner/repo`). Private repositories, credentials in the URL, and non-GitHub hosts are rejected in the browser.
+- **New project** adds another public repository, or an empty project, to the same sandbox. Projects share compute and can see the same filesystem. Each project has its own directory, conversation list, and preview port. Stopping the sandbox stops all of them.
+- **New chat** starts a conversation inside the current project. Switching conversations leaves an active reply running.
+- Agent replies render Markdown. Tool cards show arguments, streamed output, errors, and edit diffs.
+- The agent is instructed to serve web apps on `0.0.0.0` at that project's preview port, check the signed URL with its `preview` tool, and share the HTTPS link. Vite apps must allow the Daytona preview hostname. The chat header keeps an **Open preview** action after a successful check. Preview links last 24 hours and refresh when the chat is reopened or the sandbox resumes. The app process must still be running.
+- Shell commands default to a 60-second timeout. Broad `pkill -f` is rejected so it cannot kill the runtime. After an interrupted run, unfinished tool cards show an interruption.
+- Chat reconnects after a dropped socket and restores the transcript and an in-progress reply. **Stop** cancels the current model request and does not trigger free-model fallback.
+- After you deploy a newer runtime, stop and resume existing workspaces once so they upload the new bundle and pick up prompt changes.
 
-| Method   | Path                                        | Description                                  |
-| -------- | ------------------------------------------- | -------------------------------------------- |
-| GET      | `/health`                                   | Liveness                                     |
-| GET      | `/environments`                             | List environments                            |
-| POST     | `/environments`                             | Create                                       |
-| POST     | `/environments/:id/ui`                      | Mint browser chat link                       |
-| GET/POST | `/environments/:id/projects`                | List/add projects in one sandbox             |
-| GET/POST | `/environments/:id/projects/:projectId/sessions` | List/start project conversations         |
-| POST     | `/environments/:id/projects/:projectId/chat` | Resume a project or chosen conversation      |
-| POST     | `/environments/:id/start`                   | Start sleeping sandbox                       |
-| POST     | `/environments/:id/stop`                    | Stop sandbox                                 |
-| DELETE   | `/environments/:id`                         | Delete                                       |
-| GET/POST | `/ui/api/environments`                      | Browser workspace list/create (guest cookie) |
-| POST     | `/ui/api/environments/:id/chat`             | Resume agent conversation (guest cookie)     |
-| GET/POST | `/ui/api/environments/:id/projects`         | Browser project list/create                  |
-| GET/POST | `/ui/api/environments/:id/projects/:projectId/sessions` | Browser conversation list/create    |
-| POST     | `/ui/api/environments/:id/projects/:projectId/chat` | Browser conversation switch            |
-| POST     | `/ui/api/environments/:id/start` or `/stop` | Browser sandbox lifecycle                    |
-| DELETE   | `/ui/api/environments/:id`                  | Delete browser workspace                     |
-| GET      | `/ui/api/bootstrap?t=`                      | Chat UI bootstrap (UI token)                 |
-| WS       | `/ui/ws?token=`                             | Chat WebSocket proxy (UI token)              |
+## Optional Daytona snapshot
 
-## Phase 0 spike
+`sandbox/Dockerfile` is a Node 22 image with `git`, `curl`, `jq`, `ripgrep`, Python 3, and a global Pi install. Publish it through your Daytona account as a snapshot, then set `DAYTONA_SNAPSHOT` to that snapshot name. Sandbox creation then skips Daytona's on-the-fly image build.
 
-```bash
-pnpm --filter @cloud-agent/sandbox-runtime build
-pnpm spike
-```
+The control plane still uploads `sandbox/runtime/deploy` and runs `npm install` inside the sandbox on first provision and whenever the runtime is upgraded. The snapshot does not replace that step. Leave `DAYTONA_SNAPSHOT` empty until the snapshot exists in the same Daytona account and target you are using.
 
-## Design notes
+## HTTP API
 
-- **One sandbox per environment.** Public GitHub HTTPS clones work out of the box.
-- **Pi owns conversations.** Control-plane DB only stores environment metadata + session ID pointers.
-- **Browser uses short-lived UI tokens.** Runtime secrets stay on the server.
-- **Prefer `DAYTONA_SNAPSHOT`** with Node preinstalled for faster creates.
+Browser routes use the guest cookie. `/environments` routes use the bearer API key.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/health` | Liveness |
+| GET | `/environments` | List environments for `X-User-Id` |
+| POST | `/environments` | Create |
+| POST | `/environments/:id/ui` | Mint a browser chat link |
+| GET/POST | `/environments/:id/projects` | List or add projects in one sandbox |
+| GET/POST | `/environments/:id/projects/:projectId/sessions` | List or start project conversations |
+| POST | `/environments/:id/projects/:projectId/chat` | Resume a project or a chosen conversation |
+| POST | `/environments/:id/start` | Start a sleeping sandbox |
+| POST | `/environments/:id/stop` | Stop a sandbox |
+| DELETE | `/environments/:id` | Delete the environment and its sandbox |
+| GET/POST | `/ui/api/environments` | Browser workspace list and create |
+| POST | `/ui/api/environments/:id/chat` | Resume the agent conversation |
+| GET/POST | `/ui/api/environments/:id/projects` | Browser project list and create |
+| GET/POST | `/ui/api/environments/:id/projects/:projectId/sessions` | Browser conversation list and create |
+| POST | `/ui/api/environments/:id/projects/:projectId/chat` | Browser conversation switch |
+| POST | `/ui/api/environments/:id/start` or `/stop` | Browser sandbox lifecycle |
+| DELETE | `/ui/api/environments/:id` | Delete a browser workspace |
+| GET | `/ui/api/bootstrap?t=` | Chat bootstrap from a UI token |
+| WS | `/ui/ws?token=` | Chat WebSocket proxy |
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `/ui/` returns 503 | Run `pnpm --filter @cloud-agent/web build` |
+| Create fails immediately with a missing runtime bundle | Run `pnpm --filter @cloud-agent/sandbox-runtime build` and confirm `sandbox/runtime/deploy/server.js` exists |
+| Create fails with a Daytona auth or quota error | `DAYTONA_API_KEY`, account quota, and `DAYTONA_TARGET` |
+| Sandbox stays on `creating`, then `error` during install | The sandbox must reach `registry.npmjs.org` and GitHub. Read the environment error on the dashboard |
+| Model replies with text but never runs tools | Choose a tool-capable `PI_MODEL` |
+| OpenRouter reports that no endpoint is available | Allow the model's providers in OpenRouter privacy settings |
+| Preview link is empty or localhost | The dev server must listen on `0.0.0.0` and the project's preview port, then the agent must call `preview` |
+| Browser POSTs return "Request must come from this website" | The reverse proxy must pass the public `Host`. Do not host the UI on a different origin from the API |
+| Workspaces disappear for a browser | The guest cookie was cleared, or `BROWSER_SESSION_SECRET` changed |
+| Chat works, then the sandbox is gone after an hour | Daytona auto-stop is 60 minutes. Resume from the dashboard |
+| Two servers show different workspaces | They are using different SQLite files or different browser secrets |
