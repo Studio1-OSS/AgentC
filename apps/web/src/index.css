@@ -11206,3 +11206,16 @@ textarea:focus {
     0 10px 24px -6px rgba(255, 255, 255, 0.26),
     0 2px 6px rgba(0, 0, 0, 0.35);
 }
+
+/* Sidebar: one consistent, softly rounded shape for the button, nav highlights and session rows */
+.sidebar.devin-sidebar .devin-new-session-pill,
+.sidebar.devin-sidebar .devin-nav-item,
+.sidebar.devin-sidebar .devin-session-row,
+.sidebar.devin-sidebar .devin-session-row-btn {
+  border-radius: 10px !important;
+}
+
+.sidebar.devin-sidebar.collapsed .devin-new-session-pill,
+.sidebar.devin-sidebar.collapsed .devin-nav-item {
+  border-radius: 11px !important;
+}
