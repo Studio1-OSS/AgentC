@@ -1493,33 +1493,38 @@ export function App() {
                 role="status"
                 aria-live="polite"
               >
+                <div className="setup-card-body">
                 <div className="setup-card-head">
                   <span className="setup-card-mascot">
-                    <AgentLogo size={40} showShadow={false} isAnimated={selected?.status !== "error"} />
+                    <AgentLogo size={36} showShadow={false} isAnimated={selected?.status !== "error"} />
                   </span>
                   <div className="setup-card-heading">
-                    <span className="setup-card-eyebrow">Your remote workspace</span>
                     <h1 className="setup-card-title">
                       {selected?.status === "error"
-                        ? "We couldn’t start this workspace"
+                        ? "Workspace failed to start"
                         : selected?.status === "sleeping"
                           ? "Waking up your workspace"
                           : selected?.status === "ready"
                             ? "Connecting your agent"
                             : "Setting up your workspace"}
                     </h1>
+                    <p className="setup-card-text">
+                      {selected?.status === "error" ? (
+                        "The cloud sandbox couldn’t be created."
+                      ) : (
+                        <>
+                          Preparing <strong>{repoLabel(selected?.repoUrl ?? null)}</strong> in an isolated sandbox.
+                        </>
+                      )}
+                    </p>
                   </div>
                 </div>
 
-                {selected?.status === "error" ? (
+                {selected?.status === "error" && (
                   <div className="setup-card-alert">
-                    <CircleAlert size={15} />
-                    <span>{selected.errorMessage ?? "Something went wrong while creating the sandbox."}</span>
+                    <CircleAlert size={14} />
+                    <code>{selected.errorMessage ?? "Something went wrong while creating the sandbox."}</code>
                   </div>
-                ) : (
-                  <p className="setup-card-text">
-                    Preparing <strong>{repoLabel(selected?.repoUrl ?? null)}</strong> in its own isolated cloud sandbox.
-                  </p>
                 )}
 
                 <ol className="setup-card-steps">
@@ -1552,8 +1557,9 @@ export function App() {
                     Connect coding agent
                   </li>
                 </ol>
+                </div>
 
-                <div className="setup-card-actions">
+                <div className={`setup-card-actions ${selected?.status === "error" ? "is-split" : ""}`}>
                   {selected?.status === "ready" && (
                     <button
                       type="button"
@@ -1582,16 +1588,16 @@ export function App() {
                   )}
                   {selected?.status === "error" && (
                     <>
-                      <button type="button" className="setup-btn-ghost" onClick={home}>
-                        Back to workspaces
-                      </button>
                       <button
                         type="button"
-                        className="setup-btn-danger"
+                        className="setup-btn-ghost setup-btn-danger"
                         disabled={pending}
                         onClick={() => manage(selected, "delete")}
                       >
-                        <Trash2 size={14} /> Delete workspace
+                        <Trash2 size={14} /> Delete
+                      </button>
+                      <button type="button" className="obsidian-glass-button setup-btn" onClick={home}>
+                        Back to workspaces
                       </button>
                     </>
                   )}

@@ -10935,27 +10935,24 @@ textarea:focus {
    ========================================================================== */
 .setup-card {
   --sc-ink: #0f172a;
-  --sc-ink-2: #475569;
+  --sc-ink-2: #64748b;
   --sc-ink-3: #94a3b8;
-  --sc-line: #e2e8f0;
-  --sc-surface: rgba(255, 255, 255, 0.86);
-  --sc-field: #f8fafc;
+  --sc-line: rgba(15, 23, 42, 0.08);
+  --sc-surface: rgba(255, 255, 255, 0.9);
+  --sc-foot: rgba(248, 250, 252, 0.8);
   --sc-green: #16a34a;
-  --sc-green-tint: #f0fdf4;
   --sc-red: #dc2626;
-  --sc-red-tint: #fef2f2;
-  --sc-red-line: #fecaca;
+  --sc-red-tint: rgba(220, 38, 38, 0.06);
   --sc-blue: #2563eb;
-  width: min(440px, calc(100% - 32px));
-  margin: clamp(32px, 12vh, 120px) auto 48px;
-  padding: 24px;
+  width: min(400px, calc(100% - 32px));
+  margin: clamp(32px, 14vh, 140px) auto 48px;
+  overflow: hidden;
   border: 1px solid var(--sc-line);
-  border-radius: 18px;
+  border-radius: 16px;
   background: var(--sc-surface);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 24px 48px -24px rgba(15, 23, 42, 0.22),
-    0 4px 12px -4px rgba(15, 23, 42, 0.06);
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 16px 40px -20px rgba(15, 23, 42, 0.2);
   backdrop-filter: blur(20px) saturate(170%);
   -webkit-backdrop-filter: blur(20px) saturate(170%);
   animation: ttFadeUp 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
@@ -10964,133 +10961,134 @@ textarea:focus {
 .dashboard.theme-zinc .setup-card {
   --sc-ink: #f4f4f5;
   --sc-ink-2: #a1a1aa;
-  --sc-ink-3: #71717a;
-  --sc-line: rgba(255, 255, 255, 0.09);
-  --sc-surface: linear-gradient(180deg, rgba(28, 28, 32, 0.9), rgba(20, 20, 23, 0.9));
-  --sc-field: rgba(255, 255, 255, 0.04);
+  --sc-ink-3: #63636b;
+  --sc-line: rgba(255, 255, 255, 0.07);
+  --sc-surface: rgba(24, 24, 27, 0.88);
+  --sc-foot: rgba(255, 255, 255, 0.02);
   --sc-green: #4ade80;
-  --sc-green-tint: rgba(34, 197, 94, 0.12);
   --sc-red: #f87171;
-  --sc-red-tint: rgba(239, 68, 68, 0.1);
-  --sc-red-line: rgba(239, 68, 68, 0.25);
+  --sc-red-tint: rgba(248, 113, 113, 0.07);
   --sc-blue: #60a5fa;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 24px 60px -24px rgba(0, 0, 0, 0.75);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 24px 60px -28px rgba(0, 0, 0, 0.8);
+}
+
+.setup-card-body {
+  padding: 22px 22px 18px;
 }
 
 .setup-card-head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .setup-card-mascot {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: var(--sc-field);
-  border: 1px solid var(--sc-line);
+  width: 36px;
+  height: 36px;
 }
 
 .setup-card.is-error .setup-card-mascot {
-  filter: grayscale(0.35);
+  filter: grayscale(0.6);
+  opacity: 0.85;
 }
 
 .setup-card-heading {
   min-width: 0;
 }
 
-.setup-card-eyebrow {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--sc-ink-3);
-}
-
 .setup-card-title {
-  margin: 3px 0 0;
-  font-size: 18px;
+  margin: 0;
+  font-size: 15px;
   font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: -0.015em;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
   color: var(--sc-ink);
 }
 
 .setup-card-text {
-  margin: 16px 0 0;
-  font-size: 13.5px;
-  line-height: 1.55;
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
   color: var(--sc-ink-2);
   overflow-wrap: anywhere;
 }
 
 .setup-card-text strong {
-  font-weight: 600;
+  font-weight: 550;
   color: var(--sc-ink);
 }
 
 .setup-card-alert {
   display: flex;
-  align-items: flex-start;
-  gap: 9px;
+  align-items: center;
+  gap: 8px;
   margin-top: 16px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--sc-red-line);
+  padding: 8px 10px;
+  border-radius: 8px;
   background: var(--sc-red-tint);
-  font-size: 13px;
-  line-height: 1.5;
   color: var(--sc-red);
-  overflow-wrap: anywhere;
 }
 
 .setup-card-alert svg {
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
+.setup-card-alert code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Steps: a quiet vertical timeline, no box */
 .setup-card-steps {
   list-style: none;
   margin: 18px 0 0;
-  padding: 4px 0;
-  border: 1px solid var(--sc-line);
-  border-radius: 12px;
-  background: var(--sc-field);
+  padding: 0;
 }
 
 .setup-card-steps li {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 14px;
+  padding: 5px 0;
   font-size: 13px;
   color: var(--sc-ink-2);
 }
 
-.setup-card-steps li + li {
-  border-top: 1px solid var(--sc-line);
+.setup-card-steps li + li::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -6px;
+  height: 12px;
+  width: 1px;
+  background: var(--sc-line);
 }
 
 .setup-step-icon {
+  position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   flex-shrink: 0;
-  border-radius: 50%;
-  border: 1px solid var(--sc-line);
   color: var(--sc-ink-3);
 }
 
+.setup-step-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
 .setup-card-steps li.is-done .setup-step-icon {
-  border-color: transparent;
-  background: var(--sc-green-tint);
   color: var(--sc-green);
 }
 
@@ -11099,18 +11097,14 @@ textarea:focus {
 }
 
 .setup-card-steps li.is-failed .setup-step-icon {
-  border-color: transparent;
-  background: var(--sc-red-tint);
   color: var(--sc-red);
 }
 
 .setup-card-steps li.is-active {
   color: var(--sc-ink);
-  font-weight: 500;
 }
 
 .setup-card-steps li.is-active .setup-step-icon {
-  border-color: transparent;
   color: var(--sc-blue);
 }
 
@@ -11118,24 +11112,30 @@ textarea:focus {
   color: var(--sc-ink-3);
 }
 
+/* Footer */
 .setup-card-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 20px;
+  gap: 6px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--sc-line);
+  background: var(--sc-foot);
+}
+
+.setup-card-actions.is-split {
+  justify-content: space-between;
 }
 
 .setup-btn,
-.setup-btn-ghost,
-.setup-btn-danger {
+.setup-btn-ghost {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 9px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 550;
   white-space: nowrap;
@@ -11144,7 +11144,7 @@ textarea:focus {
 
 .setup-btn {
   border-radius: 999px;
-  padding: 0 16px;
+  padding: 0 15px;
   color: #ffffff;
 }
 
@@ -11155,36 +11155,28 @@ textarea:focus {
   transition: background-color 120ms ease, color 120ms ease;
 }
 
-.setup-btn-ghost:hover {
+.setup-btn-ghost:hover:not(:disabled) {
   background: rgba(127, 127, 127, 0.1);
   color: var(--sc-ink);
 }
 
-.setup-btn-danger {
-  border: 1px solid var(--sc-red-line);
+.setup-btn-ghost.setup-btn-danger {
+  color: var(--sc-ink-2);
+}
+
+.setup-btn-ghost.setup-btn-danger:hover:not(:disabled) {
   background: var(--sc-red-tint);
   color: var(--sc-red);
-  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 
-.setup-btn-danger:hover:not(:disabled) {
-  border-color: var(--sc-red);
-  transform: translateY(-1px);
-}
-
-.setup-btn-danger:disabled {
-  opacity: 0.55;
+.setup-btn-ghost:disabled {
+  opacity: 0.5;
   cursor: default;
 }
 
 @media (max-width: 479px) {
-  .setup-card {
-    padding: 20px 18px;
-  }
-
-  .setup-card-actions {
-    flex-direction: column-reverse;
-    align-items: stretch;
+  .setup-card-body {
+    padding: 18px 16px 16px;
   }
 }
 
