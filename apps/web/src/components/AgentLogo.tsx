@@ -9,6 +9,8 @@ type AgentLogoProps = {
   variant?: LogoVariant;
   isSquinting?: boolean;
   isAnimated?: boolean;
+  /** Worried expression (raised brows, frown, sweat drop) for error states. */
+  isWorried?: boolean;
 };
 
 const themes: Record<
@@ -58,6 +60,7 @@ export function AgentLogo({
   variant = "blue",
   isSquinting = false,
   isAnimated = false,
+  isWorried = false,
 }: AgentLogoProps) {
   const rawId = useId();
   const id = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
@@ -295,6 +298,24 @@ export function AgentLogo({
           <circle cx="44.5" cy="44.5" r="0.8" fill="#ffffff" fillOpacity="0.75" />
           <circle cx="59.5" cy="44.5" r="0.8" fill="#ffffff" fillOpacity="0.75" />
         </g>
+
+        {isWorried && (
+          <g className="agent-bot-worried" pointerEvents="none">
+            {/* Brows lifted at the inner ends */}
+            <path d="M 40.5,36.6 Q 44.5,35.6 48.4,33.4" fill="none" stroke={t.eyes} strokeWidth="1.9" strokeLinecap="round" />
+            <path d="M 57.6,33.4 Q 61.5,35.6 65.5,36.6" fill="none" stroke={t.eyes} strokeWidth="1.9" strokeLinecap="round" />
+            {/* Small wobbly frown */}
+            <path d="M 48.5,55 Q 50.75,52.6 53,54 Q 55.25,55.4 57.5,53" fill="none" stroke={t.eyes} strokeWidth="1.8" strokeLinecap="round" />
+            {/* Sweat drop */}
+            <path
+              d="M 72,30 C 72,30 69.2,34.4 69.2,36.2 A 2.8 2.8 0 0 0 74.8,36.2 C 74.8,34.4 72,30 72,30 Z"
+              fill="#e0f4ff"
+              stroke="#ffffff"
+              strokeWidth="0.8"
+            />
+            <circle cx="71.1" cy="35.6" r="0.7" fill="#ffffff" />
+          </g>
+        )}
 
         <g
           className="agent-bot-eyes-squint agent-eyes-closed"

@@ -1496,7 +1496,7 @@ export function App() {
                 <div className="setup-card-body">
                 <div className="setup-card-head">
                   <span className="setup-card-mascot">
-                    <AgentLogo size={36} showShadow={false} isAnimated={selected?.status !== "error"} />
+                    <AgentLogo size={36} showShadow={false} isAnimated={selected?.status !== "error"} isWorried={selected?.status === "error"} />
                   </span>
                   <div className="setup-card-heading">
                     <h1 className="setup-card-title">
