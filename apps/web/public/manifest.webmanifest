@@ -1,0 +1,17 @@
+{
+  "name": "Cloud Agent",
+  "short_name": "Cloud Agent",
+  "description": "Autonomous AI coding agent that plans, edits, tests and opens pull requests in secure cloud sandboxes.",
+  "start_url": "/ui/?view=app",
+  "scope": "/ui/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "categories": ["developer", "productivity", "utilities"],
+  "icons": [
+    { "src": "/ui/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/ui/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/ui/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/ui/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

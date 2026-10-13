@@ -53,6 +53,7 @@ import {
   RotateCcw,
   Headphones,
   BookOpen,
+  CircleAlert,
   Menu,
   Maximize2,
   Minimize2,
@@ -796,6 +797,32 @@ export function App() {
     }
   }
 
+  // Per-screen document title, and keep everything but the landing page out of
+  // search results (app screens are private; chat links carry access tokens).
+  useEffect(() => {
+    const pageTitles: Record<string, string> = {
+      automations: "Automations",
+      security: "Security & Governance",
+      review: "Review",
+      wiki: "Team Wiki & Runbooks",
+      customize: "Customize",
+    };
+    const repoUrl = live.bootstrap?.repoUrl ?? selected?.repoUrl ?? null;
+    let title = "New session · Cloud Agent";
+    if (view === "landing") title = "Cloud Agent — Autonomous AI coding agent in secure cloud sandboxes";
+    else if (token || selected) title = `${repoUrl ? repoLabel(repoUrl) : selected?.name ?? "Session"} · Cloud Agent`;
+    else if (activeNav !== "workspaces") title = `${pageTitles[activeNav]} · Cloud Agent`;
+    document.title = title;
+
+    let robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (!robots) {
+      robots = document.createElement("meta");
+      robots.name = "robots";
+      document.head.appendChild(robots);
+    }
+    robots.content = view === "landing" && !token ? "index, follow, max-image-preview:large" : "noindex, nofollow";
+  }, [view, token, selected, activeNav, live.bootstrap]);
+
   if (view === "landing") {
     return (
       <>
@@ -1461,89 +1488,110 @@ export function App() {
             {token ? (
               <AgentChat key={token} token={token} onSelect={selectChat} onResume={resumeFromToken} />
             ) : (
-              <div className="provisioning">
-                <div className="launch-icon">
-                  <AgentLogo size={56} />
+              <div
+                className={`setup-card ${selected?.status === "error" ? "is-error" : ""}`}
+                role="status"
+                aria-live="polite"
+              >
+                <div className="setup-card-head">
+                  <span className="setup-card-mascot">
+                    <AgentLogo size={40} showShadow={false} isAnimated={selected?.status !== "error"} />
+                  </span>
+                  <div className="setup-card-heading">
+                    <span className="setup-card-eyebrow">Your remote workspace</span>
+                    <h1 className="setup-card-title">
+                      {selected?.status === "error"
+                        ? "We couldn’t start this workspace"
+                        : selected?.status === "sleeping"
+                          ? "Waking up your workspace"
+                          : selected?.status === "ready"
+                            ? "Connecting your agent"
+                            : "Setting up your workspace"}
+                    </h1>
+                  </div>
                 </div>
-                <span className="eyebrow">YOUR REMOTE WORKSPACE</span>
-                <h1>
-                  {selected?.status === "error"
-                    ? "We couldn’t start this workspace"
-                    : selected?.status === "sleeping"
-                      ? "Waking up your workspace"
-                      : selected?.status === "ready"
-                        ? "Connecting your agent"
-                        : "Making room for your next idea"}
-                </h1>
-                <p>
-                  {selected?.errorMessage ??
-                    `Setting up ${repoLabel(selected?.repoUrl ?? null)} in its own cloud sandbox.`}
-                </p>
-                <div className="setup-steps">
-                  <span>
-                    <Check size={15} /> Workspace requested
-                  </span>
-                  <span>
-                    {selected?.status === "ready" ? (
-                      <Check size={15} />
-                    ) : selected?.status === "error" ? (
-                      <X size={15} />
-                    ) : (
-                      <LoaderCircle size={15} className="animate-spin" />
-                    )}
-                    {selected?.status === "ready"
-                      ? "Repository ready"
-                      : "Create sandbox & clone repository"}
-                  </span>
-                  <span>
-                    <Cpu size={15} /> Connect coding agent
-                  </span>
-                </div>
-                <div className="provisioning-actions">
+
+                {selected?.status === "error" ? (
+                  <div className="setup-card-alert">
+                    <CircleAlert size={15} />
+                    <span>{selected.errorMessage ?? "Something went wrong while creating the sandbox."}</span>
+                  </div>
+                ) : (
+                  <p className="setup-card-text">
+                    Preparing <strong>{repoLabel(selected?.repoUrl ?? null)}</strong> in its own isolated cloud sandbox.
+                  </p>
+                )}
+
+                <ol className="setup-card-steps">
+                  <li className="is-done">
+                    <span className="setup-step-icon">
+                      <Check size={13} strokeWidth={2.5} />
+                    </span>
+                    Workspace requested
+                  </li>
+                  <li
+                    className={
+                      selected?.status === "ready" ? "is-done" : selected?.status === "error" ? "is-failed" : "is-active"
+                    }
+                  >
+                    <span className="setup-step-icon">
+                      {selected?.status === "ready" ? (
+                        <Check size={13} strokeWidth={2.5} />
+                      ) : selected?.status === "error" ? (
+                        <X size={13} strokeWidth={2.5} />
+                      ) : (
+                        <LoaderCircle size={13} className="animate-spin" />
+                      )}
+                    </span>
+                    {selected?.status === "ready" ? "Repository ready" : "Create sandbox & clone repository"}
+                  </li>
+                  <li className={selected?.status === "ready" ? "is-active" : "is-pending"}>
+                    <span className="setup-step-icon">
+                      {selected?.status === "ready" ? <LoaderCircle size={13} className="animate-spin" /> : <Cpu size={13} />}
+                    </span>
+                    Connect coding agent
+                  </li>
+                </ol>
+
+                <div className="setup-card-actions">
                   {selected?.status === "ready" && (
                     <button
-                      className="primary-button"
+                      type="button"
+                      className="obsidian-glass-button setup-btn"
                       onClick={() => {
                         setError(null);
                         void openChat(selected, true);
                       }}
                     >
-                      Retry connection <RefreshCw size={15} />
+                      <RefreshCw size={14} /> Retry connection
                     </button>
                   )}
                   {selected?.status !== "ready" && selected?.status !== "error" && (
-                    <div style={{ marginTop: 20, display: "flex", gap: 12, justifyContent: "center" }}>
-                      <button
-                        type="button"
-                        className="primary-button devin-enter-workspace-now-btn"
-                        onClick={() => void refresh().catch(() => {})}
-                      >
-                        Open in Cloud Agent Workspace →
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={home}
-                      >
+                    <>
+                      <button type="button" className="setup-btn-ghost" onClick={home}>
                         Cancel
                       </button>
-                    </div>
+                      <button
+                        type="button"
+                        className="obsidian-glass-button setup-btn"
+                        onClick={() => void refresh().catch(() => {})}
+                      >
+                        <RefreshCw size={14} /> Refresh status
+                      </button>
+                    </>
                   )}
                   {selected?.status === "error" && (
                     <>
-                      <button
-                        className="secondary-button"
-                        disabled={pending}
-                        onClick={() => manage(selected, "delete")}
-                      >
-                        Delete workspace
+                      <button type="button" className="setup-btn-ghost" onClick={home}>
+                        Back to workspaces
                       </button>
                       <button
                         type="button"
-                        className="text-button"
-                        onClick={home}
+                        className="setup-btn-danger"
+                        disabled={pending}
+                        onClick={() => manage(selected, "delete")}
                       >
-                        ← Back to workspaces
+                        <Trash2 size={14} /> Delete workspace
                       </button>
                     </>
                   )}
