@@ -53,6 +53,7 @@ import {
   RotateCcw,
   Headphones,
   BookOpen,
+  Menu,
   Maximize2,
   Minimize2,
 } from "lucide-react";
@@ -60,6 +61,7 @@ const Chat = lazy(() =>
   import("@/components/Chat").then((module) => ({ default: module.Chat })),
 );
 import { useChatSession } from "@/hooks/useChatSession";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { readTokenFromUrl, chatTargetFromToken } from "@/lib/session";
 import { api, repoLabel, normalizeRepoUrl, type Workspace } from "@/lib/workspaces";
 import { ConversationManager } from "@/components/ConversationManager";
@@ -73,6 +75,7 @@ import { ThinkingTrace } from "@/components/ThinkingTrace";
 import { ToolCalls, type FileDiff, type ToolStep } from "@/components/ToolCalls";
 import { RepoPanel, type RepoCommit, type RepoPanelTab, type TerminalEntry } from "@/components/RepoPanel";
 import { Markdown } from "@/components/Markdown";
+import { NotificationsPanel, type AppNotification } from "@/components/NotificationsPanel";
 import { buildConversation, type TurnTiming } from "@/lib/conversation";
 import { AccountPopover } from "@/components/AccountPopover";
 import { WorkspaceIcon } from "@/components/WorkspaceIcon";
@@ -330,6 +333,15 @@ export function App() {
   };
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const railCollapsed = sidebarCollapsed && isDesktop;
+  useEffect(() => {
+    if (isDesktop) setSidebarOpen(false);
+  }, [isDesktop]);
+  // On phones/tablets the drawer closes once you've navigated somewhere.
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [activeNav, token, selected?.id]);
 
   const toggleSidebarCollapsed = useCallback(() => {
     setSidebarCollapsed((prev) => {
@@ -400,6 +412,50 @@ export function App() {
   useEffect(() => {
     if (token && live.items.length) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [token, live.items]);
+
+  // Notifications: workspace setup results and finished agent runs.
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifPinned, setNotifPinned] = useState(false);
+  const notify = useCallback((n: Omit<AppNotification, "id" | "at" | "read">) => {
+    setNotifications((prev) => [{ ...n, id: crypto.randomUUID(), at: Date.now(), read: false }, ...prev].slice(0, 50));
+  }, []);
+  const lastStatuses = useRef<Map<string, Workspace["status"]> | null>(null);
+  useEffect(() => {
+    const previous = lastStatuses.current;
+    const next = new Map(workspaces.map((w) => [w.id, w.status] as const));
+    lastStatuses.current = next;
+    // The first listing is the baseline; only later transitions are news.
+    if (!previous) return;
+    for (const w of workspaces) {
+      const before = previous.get(w.id);
+      if (before === w.status) continue;
+      if (w.status === "ready" && before !== undefined) {
+        notify({ kind: "workspace-ready", title: `${w.name} is ready`, body: repoLabel(w.repoUrl), workspaceId: w.id });
+      } else if (w.status === "error") {
+        notify({
+          kind: "workspace-error",
+          title: `${w.name} couldn't start`,
+          body: w.errorMessage ?? "Something went wrong while setting up the sandbox.",
+          workspaceId: w.id,
+        });
+      }
+    }
+  }, [workspaces, notify]);
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !live.busy && token) {
+      const lastPrompt = [...live.items].reverse().find((item) => item.kind === "user");
+      const prompt = lastPrompt?.kind === "user" ? lastPrompt.text.trim() : "";
+      notify({
+        kind: "agent-done",
+        title: "Cloud Agent finished a run",
+        body: prompt ? (prompt.length > 90 ? `${prompt.slice(0, 90)}…` : prompt) : undefined,
+        workspaceId: live.bootstrap?.environmentId,
+      });
+    }
+    wasBusy.current = live.busy;
+  }, [live.busy, live.items, live.bootstrap, token, notify]);
 
   // A prompt typed before the workspace finished connecting is sent once it can be.
   useEffect(() => {
@@ -812,7 +868,7 @@ export function App() {
   const activeRepo = token ? (liveRepoUrl ? repoLabel(liveRepoUrl) : null) : connectedRepo;
 
   return (
-    <div className={`dashboard ${theme === "zinc" ? "theme-zinc" : ""} ${sidebarCollapsed ? "sidebar-is-collapsed" : ""}`} data-theme={theme}>
+    <div className={`dashboard ${theme === "zinc" ? "theme-zinc" : ""} ${railCollapsed ? "sidebar-is-collapsed" : ""}`} data-theme={theme}>
       {/* Mobile Sidebar Overlay Backdrop */}
       {sidebarOpen && (
         <div
@@ -821,7 +877,22 @@ export function App() {
           aria-hidden="true"
         />
       )}
-      <aside className={`sidebar devin-sidebar ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
+      <NotificationsPanel
+        open={notifOpen}
+        pinned={notifPinned}
+        items={notifications}
+        onClose={() => setNotifOpen(false)}
+        onTogglePin={() => setNotifPinned((p) => !p)}
+        onMarkAllRead={() => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))}
+        onClear={() => setNotifications([])}
+        onOpenItem={(item) => {
+          setNotifications((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
+          const target = item.workspaceId ? workspaces.find((w) => w.id === item.workspaceId) : undefined;
+          if (target && target.id !== selected?.id) void connect(target);
+          if (!notifPinned) setNotifOpen(false);
+        }}
+      />
+      <aside className={`sidebar devin-sidebar ${sidebarOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""}`}>
         {/* Row 1: User / Team picker and header actions */}
         <div className="devin-sidebar-top-row">
           <div className="account-popover-container">
@@ -837,7 +908,7 @@ export function App() {
               <div className="devin-team-avatar">
                 <User size={13} />
               </div>
-              {!sidebarCollapsed && (
+              {!railCollapsed && (
                 <>
                   <span className="devin-team-name">
                     {userEmail ? userEmail.split("@")[0] : "My Team"}
@@ -857,7 +928,7 @@ export function App() {
             />
           </div>
           <div className="devin-header-tools">
-            {!sidebarCollapsed && (
+            {!railCollapsed && (
               <>
                 <button
                   type="button"
@@ -873,15 +944,22 @@ export function App() {
                 </button>
                 <button
                   type="button"
-                  className="devin-tool-btn"
+                  className={`devin-tool-btn devin-bell-btn ${notifOpen ? "active" : ""}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setAccountPopoverOpen(true);
+                    setAccountPopoverOpen(false);
+                    setNotifOpen((open) => !open);
                   }}
                   title="Notifications"
-                  aria-label="Notifications"
+                  aria-label={
+                    notifications.some((n) => !n.read)
+                      ? `Notifications (${notifications.filter((n) => !n.read).length} unread)`
+                      : "Notifications"
+                  }
+                  aria-expanded={notifOpen}
                 >
                   <BellIcon size={14} />
+                  {notifications.some((n) => !n.read) && <span className="devin-bell-dot" aria-hidden="true" />}
                 </button>
               </>
             )}
@@ -889,8 +967,8 @@ export function App() {
               type="button"
               className="sidebar-collapse-toggle desktop-only"
               onClick={toggleSidebarCollapsed}
-              title={sidebarCollapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
-              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={railCollapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
+              aria-label={railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               <SidebarPanelIcon size={16} />
             </button>
@@ -913,7 +991,7 @@ export function App() {
           title="New session"
         >
           <Plus size={15} />
-          {!sidebarCollapsed && <span>New session</span>}
+          {!railCollapsed && <span>New session</span>}
         </button>
 
         {/* Row 3: Navigation Menu with professional SVGs */}
@@ -928,7 +1006,7 @@ export function App() {
             title="Workspaces"
           >
             <WorkspaceIcon size={16} />
-            {!sidebarCollapsed && <span>Workspaces</span>}
+            {!railCollapsed && <span>Workspaces</span>}
           </button>
           <button
             type="button"
@@ -937,7 +1015,7 @@ export function App() {
             title="Automations"
           >
             <AutomationsIcon size={16} />
-            {!sidebarCollapsed && <span>Automations</span>}
+            {!railCollapsed && <span>Automations</span>}
           </button>
           <button
             type="button"
@@ -946,7 +1024,7 @@ export function App() {
             title="Security"
           >
             <SecurityIcon size={16} />
-            {!sidebarCollapsed && <span>Security</span>}
+            {!railCollapsed && <span>Security</span>}
           </button>
           <button
             type="button"
@@ -955,7 +1033,7 @@ export function App() {
             title="Review"
           >
             <ReviewIcon size={16} />
-            {!sidebarCollapsed && <span>Review</span>}
+            {!railCollapsed && <span>Review</span>}
           </button>
           <button
             type="button"
@@ -964,7 +1042,7 @@ export function App() {
             title="Wiki"
           >
             <WikiIcon size={15} />
-            {!sidebarCollapsed && <span>Wiki</span>}
+            {!railCollapsed && <span>Wiki</span>}
           </button>
           <button
             type="button"
@@ -973,14 +1051,14 @@ export function App() {
             title="Customize"
           >
             <CustomizeIcon size={15} />
-            {!sidebarCollapsed && <span>Customize</span>}
+            {!railCollapsed && <span>Customize</span>}
           </button>
         </nav>
 
         {/* Row 4: Sessions header and list with exact 3 dropdown menus and delete options */}
         <div className="devin-sessions-section">
           <div className="devin-sessions-header">
-            {!sidebarCollapsed ? (
+            {!railCollapsed ? (
               <>
                 <span className="devin-sessions-title">Sessions</span>
                 <div className="devin-sessions-actions">
@@ -1199,7 +1277,7 @@ export function App() {
           </div>
 
           <div className="devin-sub-section">
-            {!sidebarCollapsed && (
+            {!railCollapsed && (
               <div className="devin-recent-label">
                 <RecentIcon size={14} />
                 <span>Recent</span>
@@ -1219,9 +1297,9 @@ export function App() {
                       disabled={pending}
                       title={w.name}
                     >
-                      {!sidebarCollapsed && <span className="devin-session-name">{w.name}</span>}
+                      {!railCollapsed && <span className="devin-session-name">{w.name}</span>}
                     </button>
-                    {!sidebarCollapsed && (
+                    {!railCollapsed && (
                       <button
                         type="button"
                         className="devin-session-delete-btn"
@@ -1238,7 +1316,7 @@ export function App() {
                   </div>
                 ))
               ) : (
-                !sidebarCollapsed && <div className="devin-no-sessions">No sessions</div>
+                !railCollapsed && <div className="devin-no-sessions">No sessions</div>
               )}
             </div>
           </div>
@@ -1253,7 +1331,7 @@ export function App() {
             className="devin-powered-daytona"
             title="Daytona - Standardized development environments"
           >
-            {!sidebarCollapsed ? (
+            {!railCollapsed ? (
               <>
                 <span className="devin-powered-text">Powered by</span>
                 <TokenFactoryLogo height={14} className="devin-powered-brand" />
@@ -1327,6 +1405,38 @@ export function App() {
         </div>
       </aside>
       <div className="main-shell">
+        <div className="mobile-appbar">
+          <button
+            type="button"
+            className="mobile-appbar-btn"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={sidebarOpen}
+          >
+            <Menu size={19} />
+          </button>
+          <button type="button" className="mobile-appbar-brand" onClick={handleNewSession} aria-label="Cloud Agent home">
+            <AgentLogo size={26} showShadow={false} />
+            <span className="mobile-appbar-wordmark">
+              cloud<span>agent</span>
+            </span>
+          </button>
+          <div className="mobile-appbar-actions">
+            <button
+              type="button"
+              className="mobile-appbar-btn devin-bell-btn"
+              onClick={() => setNotifOpen((open) => !open)}
+              aria-label="Notifications"
+              aria-expanded={notifOpen}
+            >
+              <BellIcon size={16} />
+              {notifications.some((n) => !n.read) && <span className="devin-bell-dot" aria-hidden="true" />}
+            </button>
+            <button type="button" className="mobile-appbar-btn" onClick={handleNewSession} aria-label="New session">
+              <Plus size={18} />
+            </button>
+          </div>
+        </div>
         {selected && !token ? (
           <div className="session-view">
             <div className="session-toolbar">
@@ -1806,7 +1916,7 @@ export function App() {
                 </button>
                 <button
                   type="submit"
-                  className="devin-gh-modal-submit"
+                  className="obsidian-glass-button devin-gh-modal-submit"
                 >
                   Connect & Open Repository →
                 </button>

@@ -630,11 +630,14 @@ textarea:focus {
 .sidebar.collapsed .collapsed-account-card .avatar {
   margin: 0;
 }
+/* Collapsed rail: the account button sits at the top, so open the menu
+   beside it (top-aligned) instead of stretching it to the bottom. */
 .sidebar.collapsed .account-popover-menu {
+  top: 0;
+  bottom: auto;
   left: calc(100% + 12px);
   right: auto;
   width: 260px;
-  bottom: 0;
 }
 .guest {
   display: flex;
@@ -7531,22 +7534,17 @@ textarea:focus {
   color: #ffffff;
 }
 
+/* Glass finish comes from .obsidian-glass-button; this only sizes it */
 .devin-gh-modal-submit {
-  background: #2563eb;
-  border: none;
-  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
-  padding: 8px 18px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
-}
-
-.devin-gh-modal-submit:hover {
-  background: #1d4ed8;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.5);
+  color: #ffffff;
 }
 
 /* ==========================================================================
@@ -9929,4 +9927,955 @@ textarea:focus {
 /* Live agent replies are markdown; let the renderer own the spacing */
 .devin-asst-message-text.devin-asst-markdown {
   white-space: normal;
+}
+
+/* Section pages (Automations, Security, Wiki, Customize): more air above the title */
+.devin-page-view {
+  padding-top: 72px;
+}
+
+@media (max-width: 768px) {
+  .devin-page-view {
+    padding-top: 40px;
+  }
+}
+
+/* Agent picker: bare clouds (no tile) that come alive on hover */
+.dashboard .agent-popover-item .agent-popover-item-avatar {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  transform: none;
+}
+
+.agent-popover-item .agent-popover-item-avatar .agent-logo-wrapper {
+  transform-origin: 50% 100%;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.25s ease;
+}
+
+.agent-popover-item:hover .agent-popover-item-avatar .agent-logo-wrapper,
+.agent-popover-item:focus-visible .agent-popover-item-avatar .agent-logo-wrapper {
+  animation: agentPickerHop 0.9s cubic-bezier(0.37, 0, 0.25, 1) both;
+  filter: drop-shadow(0 6px 8px rgba(15, 23, 42, 0.16));
+}
+
+.agent-popover-item:hover .agent-popover-item-avatar .agent-bot-eyes.agent-eyes-open,
+.agent-popover-item:focus-visible .agent-popover-item-avatar .agent-bot-eyes.agent-eyes-open {
+  animation: agentPickerGlance 0.9s ease-in-out both;
+}
+
+/* squash, hop, land, settle a touch larger */
+@keyframes agentPickerHop {
+  0% { transform: translateY(0) scale(1, 1); }
+  18% { transform: translateY(0) scale(1.08, 0.9); }
+  42% { transform: translateY(-5px) scale(0.95, 1.07); }
+  64% { transform: translateY(0) scale(1.05, 0.95); }
+  82% { transform: translateY(-1px) scale(1.06, 1.06); }
+  100% { transform: translateY(-1px) scale(1.08, 1.08); }
+}
+
+/* eyes glance up toward the cursor, then blink once */
+@keyframes agentPickerGlance {
+  0%, 20% { transform: translate(0, 0) scaleY(1); }
+  45% { transform: translate(2px, -2px) scaleY(1); }
+  70% { transform: translate(2px, -2px) scaleY(1); }
+  78% { transform: translate(1px, -1px) scaleY(0.1); }
+  86%, 100% { transform: translate(0, -1px) scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-popover-item:hover .agent-popover-item-avatar .agent-logo-wrapper,
+  .agent-popover-item:hover .agent-popover-item-avatar .agent-bot-eyes.agent-eyes-open {
+    animation: none;
+  }
+  .agent-popover-item:hover .agent-popover-item-avatar .agent-logo-wrapper {
+    transform: scale(1.06);
+  }
+}
+
+/* Landing agent clouds: eyes close and smile in place, no jump or overshoot.
+   (Inline origins mixed fill-box with absolute px, which moved the pivot.) */
+.cloud-agent-eyes-open,
+.cloud-agent-eyes-squint {
+  transform-box: fill-box !important;
+  transform-origin: 50% 50% !important;
+}
+
+.cloud-agent-eyes-open {
+  transition:
+    transform 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.18s ease 0.06s !important;
+}
+
+.cloud-agent-eyes-squint {
+  transform: scaleY(0.55) !important;
+  transition:
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1) 0.1s,
+    opacity 0.24s ease 0.1s !important;
+}
+
+.cloud-agent-hitbox:hover .cloud-agent-eyes-open,
+.cloud-agent-hitbox.is-hovered .cloud-agent-eyes-open,
+.cloud-agent-hitbox.is-jumping .cloud-agent-eyes-open {
+  transform: scaleY(0.1) !important;
+  opacity: 0 !important;
+}
+
+.cloud-agent-hitbox:hover .cloud-agent-eyes-squint,
+.cloud-agent-hitbox.is-hovered .cloud-agent-eyes-squint,
+.cloud-agent-hitbox.is-jumping .cloud-agent-eyes-squint {
+  transform: scaleY(1) !important;
+  opacity: 1 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud-agent-eyes-open,
+  .cloud-agent-eyes-squint {
+    transition: opacity 0.2s ease !important;
+  }
+}
+
+/* Dark theme: the toast's Connect button is frosted white glass */
+.dashboard.theme-zinc .devin-gh-toast .devin-gh-toast-connect.obsidian-glass-button {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(241, 245, 249, 0.9) 55%, rgba(226, 232, 240, 0.86) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  color: #0f172a;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 1),
+    inset 0 -1px 1.5px rgba(15, 23, 42, 0.12),
+    0 6px 18px -4px rgba(255, 255, 255, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.dashboard.theme-zinc .devin-gh-toast .devin-gh-toast-connect.obsidian-glass-button::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.2) 55%, transparent 100%);
+}
+
+.dashboard.theme-zinc .devin-gh-toast .devin-gh-toast-connect.obsidian-glass-button:not(:disabled):hover {
+  background: linear-gradient(180deg, #ffffff 0%, rgba(248, 250, 252, 0.96) 55%, rgba(241, 245, 249, 0.92) 100%);
+  color: #020617;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 1),
+    inset 0 -1px 1.5px rgba(15, 23, 42, 0.12),
+    0 10px 24px -6px rgba(255, 255, 255, 0.28),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* ==========================================================================
+   Notifications slide-over (opened from the sidebar bell)
+   ========================================================================== */
+.notif-panel {
+  --nf-ink: #f4f4f5;
+  --nf-ink-2: #a1a1aa;
+  --nf-ink-3: #71717a;
+  --nf-line: rgba(255, 255, 255, 0.08);
+  --nf-surface: #161618;
+  --nf-raised: #1f1f22;
+  --nf-hover: rgba(255, 255, 255, 0.05);
+  --nf-accent: #60a5fa;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  width: min(430px, 100vw);
+  background: var(--nf-surface);
+  border-left: 1px solid var(--nf-line);
+  border-right: 1px solid var(--nf-line);
+  box-shadow: 24px 0 60px -20px rgba(0, 0, 0, 0.55);
+  color: var(--nf-ink);
+  outline: none;
+  animation: notifSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dashboard:not(.theme-zinc) .notif-panel {
+  --nf-ink: #0f172a;
+  --nf-ink-2: #475569;
+  --nf-ink-3: #94a3b8;
+  --nf-line: #e2e8f0;
+  --nf-surface: #ffffff;
+  --nf-raised: #f1f5f9;
+  --nf-hover: rgba(15, 23, 42, 0.04);
+  --nf-accent: #2563eb;
+  box-shadow: 24px 0 60px -24px rgba(15, 23, 42, 0.25);
+}
+
+@keyframes notifSlideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.notif-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 940;
+  background: transparent;
+}
+
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 8px 20px;
+}
+
+.notif-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--nf-ink);
+  letter-spacing: -0.01em;
+}
+
+.notif-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.notif-menu-wrap {
+  position: relative;
+}
+
+.notif-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--nf-ink-2);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.notif-icon-btn:hover,
+.notif-icon-btn.active {
+  background: var(--nf-hover);
+  color: var(--nf-ink);
+}
+
+.notif-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 2;
+  min-width: 190px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--nf-line);
+  background: var(--nf-surface);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
+  animation: tcPopIn 140ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.dashboard:not(.theme-zinc) .notif-menu {
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14);
+}
+
+.notif-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--nf-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.notif-menu button:hover:not(:disabled) {
+  background: var(--nf-hover);
+}
+
+.notif-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.notif-menu-check {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  color: var(--nf-accent);
+}
+
+.notif-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 16px 12px;
+  border-bottom: 1px solid var(--nf-line);
+}
+
+.notif-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--nf-ink-3);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.notif-tab:hover {
+  color: var(--nf-ink);
+}
+
+.notif-tab.active {
+  background: var(--nf-raised);
+  color: var(--nf-ink);
+}
+
+.notif-tab-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--nf-ink-3);
+}
+
+.notif-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  animation: ttFadeUp 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  transition: background-color 120ms ease;
+}
+
+.notif-item:hover {
+  background: var(--nf-hover);
+}
+
+.notif-item-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--nf-raised);
+  color: var(--nf-ink-2);
+}
+
+.notif-item.kind-workspace-ready .notif-item-icon { color: #22c55e; }
+.notif-item.kind-workspace-error .notif-item-icon { color: #ef4444; }
+.notif-item.kind-agent-done .notif-item-icon { color: var(--nf-accent); }
+
+.notif-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-item-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--nf-ink-2);
+}
+
+.notif-item.unread .notif-item-title {
+  color: var(--nf-ink);
+  font-weight: 600;
+}
+
+.notif-item-body {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--nf-ink-3);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.notif-item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notif-item-time {
+  font-size: 11.5px;
+  color: var(--nf-ink-3);
+  white-space: nowrap;
+}
+
+.notif-unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--nf-accent);
+}
+
+.notif-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 320px;
+  padding: 0 24px 60px;
+  text-align: center;
+}
+
+.notif-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: var(--nf-raised);
+  color: var(--nf-ink);
+}
+
+.notif-empty-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--nf-ink);
+}
+
+.notif-empty-text {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--nf-ink-3);
+}
+
+/* Bell in the sidebar: small unread dot */
+.devin-bell-btn {
+  position: relative;
+}
+
+.devin-bell-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3b82f6;
+  box-shadow: 0 0 0 2px var(--color-surface, #0c0c0e);
+}
+
+.dashboard:not(.theme-zinc) .devin-bell-dot {
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-panel,
+  .notif-item,
+  .notif-menu {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE LAYOUT
+   Large ≥1440 · Desktop ≥1024 (sidebar rail) · Tablet <1024 (drawer + app bar)
+   · Phone <640 · Small phone <380
+   ========================================================================== */
+
+/* Visibility helpers used in the markup */
+.mobile-only { display: none !important; }
+
+/* Mobile app bar (only shown below 1024px) */
+.mobile-appbar {
+  display: none;
+}
+
+.mobile-appbar-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: #d4d4d8;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.mobile-appbar-btn:hover,
+.mobile-appbar-btn[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.mobile-appbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.mobile-appbar-wordmark {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #f4f4f5;
+  white-space: nowrap;
+}
+
+.mobile-appbar-wordmark span {
+  font-weight: 400;
+  color: #a1a1aa;
+}
+
+.mobile-appbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.dashboard:not(.theme-zinc) .mobile-appbar-btn {
+  color: #334155;
+}
+
+.dashboard:not(.theme-zinc) .mobile-appbar-btn:hover,
+.dashboard:not(.theme-zinc) .mobile-appbar-btn[aria-expanded="true"] {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+
+.dashboard:not(.theme-zinc) .mobile-appbar-wordmark {
+  color: #0f172a;
+}
+
+.dashboard:not(.theme-zinc) .mobile-appbar-wordmark span {
+  color: #64748b;
+}
+
+/* ---------- Desktop: content follows the sidebar's real width ---------- */
+@media (min-width: 1024px) {
+  .dashboard .main-shell {
+    margin-left: 248px;
+    width: calc(100% - 248px);
+    transition: margin-left 0.26s cubic-bezier(0.16, 1, 0.3, 1), width 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .dashboard.sidebar-is-collapsed .main-shell {
+    margin-left: 54px;
+    width: calc(100% - 54px);
+  }
+
+  .sidebar-backdrop {
+    display: none !important;
+  }
+}
+
+/* ---------- Large screens: give content a little more room ---------- */
+@media (min-width: 1440px) {
+  .devin-center-stage {
+    max-width: 720px;
+  }
+
+  .devin-conversation-stream-inner,
+  .devin-docked-bottom-container {
+    max-width: 840px;
+  }
+
+  .devin-docked-card {
+    max-width: 840px;
+  }
+
+  .devin-page-view {
+    max-width: 1080px;
+  }
+}
+
+/* ---------- Tablet & below: drawer navigation + app bar ---------- */
+@media (max-width: 1023px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: flex !important; }
+
+  .mobile-appbar {
+    position: sticky;
+    top: 0;
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 56px;
+    padding: 0 10px;
+    padding-top: env(safe-area-inset-top, 0px);
+    box-sizing: content-box;
+    background: rgba(12, 12, 14, 0.86);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+  }
+
+  .dashboard:not(.theme-zinc) .mobile-appbar {
+    background: rgba(255, 255, 255, 0.86);
+    border-bottom-color: #e2e8f0;
+  }
+
+  /* Drawer: always the full menu, never the icon rail */
+  .dashboard .sidebar.devin-sidebar,
+  .dashboard .sidebar.devin-sidebar.collapsed {
+    width: 288px !important;
+    max-width: 86vw;
+    padding: 12px 10px !important;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    align-items: stretch;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: none;
+  }
+
+  .dashboard .sidebar.devin-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 24px 0 60px rgba(0, 0, 0, 0.35);
+  }
+
+  .main-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Views fill the space under the app bar */
+  .devin-conversation-layout {
+    height: calc(100vh - 56px - env(safe-area-inset-top, 0px));
+    height: calc(100dvh - 56px - env(safe-area-inset-top, 0px));
+  }
+
+  .devin-canvas {
+    min-height: calc(100dvh - 56px);
+    padding: 24px 20px 32px;
+    justify-content: flex-start;
+  }
+
+  .devin-center-stage {
+    margin-top: clamp(16px, 8vh, 72px);
+  }
+
+  .devin-review-page {
+    min-height: calc(100dvh - 56px);
+  }
+
+  .devin-page-view {
+    padding-top: 40px;
+  }
+
+  /* Conversation header wraps instead of overflowing */
+  .devin-conversation-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+
+  .devin-connected-repo-pill {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .devin-connected-repo-pill > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Notifications toast clears the screen edges */
+  .devin-gh-toast {
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 639px) {
+  /* 16px inputs stop iOS from zooming the page on focus */
+  .devin-prompt-textarea,
+  .devin-prompt-textarea:focus,
+  .devin-docked-card .devin-prompt-textarea,
+  .review-main-input,
+  .review-top-input,
+  .devin-gh-modal-input,
+  .workspace-modal input,
+  .workspace-modal textarea {
+    font-size: 16px !important;
+  }
+
+  .devin-canvas {
+    padding: 16px 12px 24px;
+  }
+
+  .devin-center-stage {
+    gap: 14px;
+    margin-top: 12px;
+  }
+
+  .devin-brand-row {
+    flex-wrap: wrap;
+    gap: 10px;
+    row-gap: 12px;
+  }
+
+  /* Home prompt card */
+  .devin-card-banner {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 9px 14px;
+  }
+
+  .devin-card-body {
+    padding: 12px 12px 10px 14px;
+  }
+
+  .devin-card-footer {
+    flex-wrap: wrap;
+    row-gap: 10px;
+    column-gap: 8px;
+  }
+
+  .devin-footer-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .devin-agent-btn-name {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Popovers never run off-screen */
+  .devin-agent-popover-menu,
+  .devin-model-menu,
+  .devin-send-dropdown-menu,
+  .devin-mode-popover-menu,
+  .devin-small-popover-menu,
+  .devin-help-popover-menu,
+  .rp-pr-menu,
+  .notif-menu {
+    max-width: calc(100vw - 24px);
+  }
+
+  .devin-agent-popover-menu {
+    width: min(320px, calc(100vw - 24px)) !important;
+  }
+
+  /* Chat */
+  .devin-conversation-stream-inner {
+    padding: 20px 14px 190px;
+    gap: 18px;
+  }
+
+  .devin-asst-bubble {
+    gap: 10px;
+  }
+
+  .devin-conversation-header {
+    padding: 8px 12px;
+  }
+
+  .devin-header-action-btn span {
+    display: none;
+  }
+
+  .devin-docked-bottom-bar {
+    padding: 10px 10px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .devin-docked-card .devin-card-body {
+    padding: 10px 10px 10px 14px;
+  }
+
+  .devin-docked-card .devin-card-footer {
+    margin-top: 10px;
+  }
+
+  .devin-docked-bottom-bar .devin-docked-disclaimer {
+    font-size: 10.5px;
+    margin-top: 6px;
+  }
+
+  .tool-calls,
+  .thinking-trace {
+    max-width: 100%;
+  }
+
+  .tool-calls-preview {
+    width: min(320px, calc(100vw - 24px));
+  }
+
+  /* Section pages: header stacks, cards go single-column */
+  .devin-page-view {
+    padding: 28px 16px 56px;
+    gap: 18px;
+  }
+
+  .devin-page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .devin-page-header .devin-glass-link {
+    align-self: flex-start;
+  }
+
+  .devin-page-title {
+    font-size: 20px;
+  }
+
+  .devin-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Review page */
+  .devin-review-page {
+    padding: 12px;
+  }
+
+  .review-page-top-bar {
+    flex-wrap: wrap;
+  }
+
+  .review-top-input-wrap {
+    flex: 1 1 200px;
+    width: auto;
+  }
+
+  .review-hero-title {
+    font-size: 22px;
+    text-align: center;
+  }
+
+  /* Modals: edge-to-edge with breathing room, scroll inside */
+  .modal-backdrop {
+    padding: 12px;
+    align-items: end;
+  }
+
+  .workspace-modal,
+  .devin-settings-modal,
+  .devin-gh-connect-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    padding: 22px 18px !important;
+    border-radius: 18px !important;
+  }
+
+  .devin-support-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Toast spans the bottom edge */
+  .devin-gh-toast {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Notifications fill the screen */
+  .notif-panel {
+    width: 100vw;
+    left: 0 !important;
+    border-left: none;
+    border-right: none;
+  }
+
+  .notif-head {
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  }
+}
+
+/* ---------- Small phones ---------- */
+@media (max-width: 379px) {
+  .mobile-appbar-wordmark {
+    display: none;
+  }
+
+  .devin-theme-picker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .devin-agent-btn-name {
+    display: none;
+  }
+
+  .devin-footer-left {
+    gap: 2px;
+  }
+}
+
+/* ---------- Landscape phones: keep the composer usable ---------- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .mobile-appbar {
+    height: 48px;
+  }
+
+  .devin-conversation-layout {
+    height: calc(100dvh - 48px);
+  }
+
+  .devin-docked-card .devin-prompt-textarea {
+    max-height: 96px;
+  }
+
+  .devin-docked-card.is-expanded .devin-prompt-textarea {
+    min-height: 120px;
+  }
 }
