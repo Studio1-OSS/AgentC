@@ -20,6 +20,11 @@ if (!config.daytonaApiKey) {
     "DAYTONA_API_KEY is not set. Environment create/start/stop will fail until it is configured.",
   );
 }
+if (!config.llm.apiKey) {
+  console.warn(
+    "No LLM API key is set (NEBIUS_API_KEY or another provider key). Agent turns will fail until one is configured in .env.",
+  );
+}
 
 const service = new EnvironmentService(config);
 const app = new Hono<{ Variables: AuthVariables }>();
@@ -91,3 +96,10 @@ attachUiWebSocketProxy(
 );
 
 export { app, service, config };
+
+const shutdown = async () => {
+  await service.disposeAll();
+  server.close(() => process.exit(0));
+};
+process.on("SIGINT", () => { void shutdown(); });
+process.on("SIGTERM", () => { void shutdown(); });

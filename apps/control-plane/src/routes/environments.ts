@@ -149,7 +149,7 @@ export function createEnvironmentRoutes(service: EnvironmentService) {
     }
   });
 
-  /** Optional HTTP proxy into sandbox runtime (for clients that cannot hit preview URLs). */
+  /** Authenticated HTTP access to the server-side agent runtime. */
   app.all("/:id/runtime/*", async (c) => {
     const userId = c.get("userId");
     const environmentId = c.req.param("id");

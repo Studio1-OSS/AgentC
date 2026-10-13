@@ -18,7 +18,35 @@ export function createBrowserRoutes(
     c.header("Cache-Control", "no-store");
     if (!["GET", "HEAD"].includes(c.req.method)) {
       const origin = c.req.header("origin");
-      if (!origin || new URL(origin).host !== c.req.header("host")) {
+      if (!origin) {
+        return c.json({ error: "Request must come from this website" }, 403);
+      }
+      let originHost: string;
+      try {
+        originHost = new URL(origin).host;
+      } catch {
+        return c.json({ error: "Request must come from this website" }, 403);
+      }
+      const host = c.req.header("host") ?? "";
+      const forwardedHost = c.req.header("x-forwarded-host")?.split(",")[0]?.trim() ?? "";
+
+      const isLoopback = (h: string) => {
+        const hostname = h.split(":")[0]?.toLowerCase();
+        return (
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "::1" ||
+          hostname === "[::1]"
+        );
+      };
+
+      const isMatchingHost =
+        originHost === host || (Boolean(forwardedHost) && originHost === forwardedHost);
+      const isDevLoopback =
+        isLoopback(originHost) &&
+        (isLoopback(host) || (Boolean(forwardedHost) && isLoopback(forwardedHost)));
+
+      if (!isMatchingHost && !isDevLoopback) {
         return c.json({ error: "Request must come from this website" }, 403);
       }
     }

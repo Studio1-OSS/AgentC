@@ -4,15 +4,10 @@ import {
   Image,
 } from "@daytona/sdk";
 import {
-  DEFAULT_PI_AGENT_DIR,
-  DEFAULT_RUNTIME_PORT,
   DEFAULT_WEB_PREVIEW_PORT,
   DEFAULT_WORKSPACE_PATH,
   webPreviewConfigPath,
 } from "@cloud-agent/protocol";
-import { readdir, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
-import WebSocket from "ws";
 
 export type DaytonaClientConfig = {
   apiKey: string;
@@ -20,9 +15,7 @@ export type DaytonaClientConfig = {
   target?: string;
   /** Pre-built snapshot name. Prefer this in production. */
   snapshot?: string;
-  runtimePort?: number;
   workspacePath?: string;
-  piAgentDir?: string;
 };
 
 export type CreateSandboxOptions = {
@@ -45,17 +38,13 @@ export type SignedPreview = {
   expiresInSeconds: number;
 };
 
-const RUNTIME_SESSION_ID = "sandbox-runtime";
-
 /**
  * Thin wrapper around @daytona/sdk for environment lifecycle.
- * Pi conversation state stays inside the sandbox; this client only orchestrates compute.
+ * Repositories and tool execution stay in Daytona; Pi and its credentials stay on the server.
  */
 export class SandboxClient {
   readonly daytona: Daytona;
-  readonly runtimePort: number;
   readonly workspacePath: string;
-  readonly piAgentDir: string;
   readonly snapshot?: string;
 
   constructor(config: DaytonaClientConfig) {
@@ -64,17 +53,13 @@ export class SandboxClient {
       ...(config.apiUrl ? { apiUrl: config.apiUrl } : {}),
       ...(config.target ? { target: config.target } : {}),
     });
-    this.runtimePort = config.runtimePort ?? DEFAULT_RUNTIME_PORT;
     this.workspacePath = config.workspacePath ?? DEFAULT_WORKSPACE_PATH;
-    this.piAgentDir = config.piAgentDir ?? DEFAULT_PI_AGENT_DIR;
     this.snapshot = config.snapshot;
   }
 
   async create(options: CreateSandboxOptions): Promise<Sandbox> {
     const envVars = {
       WORKSPACE_PATH: this.workspacePath,
-      PI_AGENT_DIR: this.piAgentDir,
-      RUNTIME_PORT: String(this.runtimePort),
       ...options.envVars,
     };
 
@@ -93,8 +78,7 @@ export class SandboxClient {
       );
     }
 
-    // MVP fallback: create from a Node image and install runtime deps on first boot.
-    // Prefer DAYTONA_SNAPSHOT in production so this install step is skipped.
+    // Node is for the user's projects; no Pi process is installed in the sandbox.
     return this.daytona.create(
       {
         name: options.name,
@@ -136,7 +120,7 @@ export class SandboxClient {
 
   async ensureWorkspace(sandbox: Sandbox): Promise<void> {
     await sandbox.process.executeCommand(
-      `mkdir -p "${this.workspacePath}" "${this.piAgentDir}/sessions"`,
+      `mkdir -p ${shellQuote(this.workspacePath)}`,
       undefined,
       undefined,
       60,
@@ -146,7 +130,7 @@ export class SandboxClient {
   async cloneRepository(sandbox: Sandbox, options: CloneRepoOptions): Promise<void> {
     const target = options.path ?? this.workspacePath;
     await sandbox.process.executeCommand(
-      `mkdir -p "$(dirname "${target}")" && rm -rf "${target}"`,
+      `mkdir -p ${shellQuote(target + "/..")} && rm -rf ${shellQuote(target)}`,
       undefined,
       undefined,
       60,
@@ -179,70 +163,6 @@ export class SandboxClient {
     );
   }
 
-  /**
-   * Upload local runtime bundle + install dependencies inside the sandbox,
-   * then start the long-lived runtime process.
-   */
-  async deployAndStartRuntime(
-    sandbox: Sandbox,
-    options: {
-      runtimeBundleLocalDir: string;
-      runtimeAccessToken: string;
-      modelEnv: Record<string, string>;
-      runtimeEntry?: string;
-    },
-  ): Promise<void> {
-    const remoteRuntimeDir = "/home/daytona/sandbox-runtime";
-
-    await sandbox.process.executeCommand(
-      `rm -rf "${remoteRuntimeDir}" && mkdir -p "${remoteRuntimeDir}"`,
-      undefined,
-      undefined,
-      60,
-    );
-
-    await uploadDirectory(sandbox, options.runtimeBundleLocalDir, remoteRuntimeDir);
-
-    const install = await sandbox.process.executeCommand(
-      `cd "${remoteRuntimeDir}" && npm install --omit=dev --ignore-scripts`,
-      undefined,
-      undefined,
-      300,
-    );
-    if (install.exitCode !== 0) {
-      throw new Error(`Runtime install failed: ${install.result}`);
-    }
-
-    // Recreate runtime session if present.
-    try {
-      await sandbox.process.deleteSession(RUNTIME_SESSION_ID);
-    } catch {
-      // ignore missing session
-    }
-    await sandbox.process.createSession(RUNTIME_SESSION_ID);
-
-    const envExports = Object.entries({
-      ...options.modelEnv,
-      RUNTIME_PORT: String(this.runtimePort),
-      WORKSPACE_PATH: this.workspacePath,
-      PI_AGENT_DIR: this.piAgentDir,
-      RUNTIME_ACCESS_TOKEN: options.runtimeAccessToken,
-      NODE_ENV: "production",
-    })
-      .filter(([, v]) => Boolean(v))
-      .map(([k, v]) => `export ${k}=${shellQuote(v)}`)
-      .join(" && ");
-
-    const entry = options.runtimeEntry ?? "server.js";
-    await sandbox.process.executeSessionCommand(RUNTIME_SESSION_ID, {
-      command: `${envExports} && cd ${shellQuote(remoteRuntimeDir)} && node ${shellQuote(entry)}`,
-      runAsync: true,
-    });
-
-    await this.waitForRuntimeHealthy(sandbox, 90_000);
-    await this.configureWebPreview(sandbox);
-  }
-
   async configureWebPreview(sandbox: Sandbox, port = DEFAULT_WEB_PREVIEW_PORT): Promise<void> {
     const preview = await this.getSignedPreview(sandbox, port, 86400);
     await sandbox.fs.createFolder("/home/daytona/.cloud-agent", "700");
@@ -252,33 +172,6 @@ export class SandboxClient {
       port: preview.port,
       expiresAt: new Date(Date.now() + 86400_000).toISOString(),
     })), webPreviewConfigPath(port));
-  }
-
-  async waitForRuntimeHealthy(sandbox: Sandbox, timeoutMs = 60_000): Promise<void> {
-    const started = Date.now();
-    let lastError = "timeout";
-
-    while (Date.now() - started < timeoutMs) {
-      try {
-        const res = await sandbox.process.executeCommand(
-          `curl -sf http://127.0.0.1:${this.runtimePort}/health`,
-          undefined,
-          undefined,
-          10,
-        );
-        if (res.exitCode === 0) return;
-        lastError = res.result || `exit ${res.exitCode}`;
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err);
-      }
-      await sleep(1500);
-    }
-
-    throw new Error(`Sandbox runtime did not become healthy: ${lastError}`);
-  }
-
-  async getRuntimePreviewUrl(sandbox: Sandbox): Promise<SignedPreview> {
-    return this.getSignedPreview(sandbox, this.runtimePort, 3600);
   }
 
   async getSignedPreview(
@@ -295,129 +188,10 @@ export class SandboxClient {
     };
   }
 
-  /**
-   * Proxy an HTTP request into the sandbox runtime via Daytona preview.
-   * Control plane uses this so browsers never hold sandbox credentials.
-   */
-  async fetchRuntime(
-    sandbox: Sandbox,
-    path: string,
-    init: RequestInit & { runtimeAccessToken: string },
-  ): Promise<Response> {
-    const preview = await sandbox.getPreviewLink(this.runtimePort);
-    const url = new URL(path, preview.url.endsWith("/") ? preview.url : `${preview.url}/`);
-
-    const headers = new Headers(init.headers);
-    headers.set("x-daytona-preview-token", preview.token);
-    headers.set("authorization", `Bearer ${init.runtimeAccessToken}`);
-    if (init.body && !headers.has("content-type")) {
-      headers.set("content-type", "application/json");
-    }
-
-    const { runtimeAccessToken: _, ...rest } = init;
-    return fetch(url, {
-      ...rest,
-      headers,
-      signal: rest.signal ?? AbortSignal.timeout(20_000),
-    });
-  }
-
-  /**
-   * Open a WebSocket to a Pi session inside the sandbox runtime.
-   * Used by the control-plane UI proxy (browser never holds these credentials).
-   */
-  async connectRuntimeSessionWs(
-    sandbox: Sandbox,
-    options: { piSessionId: string; runtimeAccessToken: string; projectId?: string; previewPort?: number },
-  ): Promise<WebSocket> {
-    const preview = await sandbox.getPreviewLink(this.runtimePort);
-    const httpBase = preview.url.endsWith("/") ? preview.url : `${preview.url}/`;
-    const wsBase = httpBase.replace(/^http/i, "ws");
-    const url = new URL(
-      `ws/sessions/${encodeURIComponent(options.piSessionId)}`,
-      wsBase,
-    );
-    url.searchParams.set("token", options.runtimeAccessToken);
-    if (options.projectId) url.searchParams.set("projectId", options.projectId);
-    if (options.previewPort) url.searchParams.set("previewPort", String(options.previewPort));
-
-    return await new Promise<WebSocket>((resolve, reject) => {
-      const ws = new WebSocket(url, {
-        handshakeTimeout: 15_000,
-        headers: {
-          "x-daytona-preview-token": preview.token,
-        },
-      });
-      const timer = setTimeout(() => {
-        cleanup();
-        ws.terminate();
-        reject(new Error("Runtime WebSocket timed out"));
-      }, 20_000);
-      const onError = (err: Error) => {
-        cleanup();
-        reject(err);
-      };
-      const onOpen = () => {
-        cleanup();
-        resolve(ws);
-      };
-      const cleanup = () => {
-        clearTimeout(timer);
-        ws.off("open", onOpen);
-        ws.off("error", onError);
-      };
-      ws.once("open", onOpen);
-      ws.once("error", onError);
-    });
-  }
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function uploadDirectory(
-  sandbox: Sandbox,
-  localDir: string,
-  remoteDir: string,
-): Promise<void> {
-  await sandbox.fs.createFolder(remoteDir, "755");
-  const files: Array<{ source: string; destination: string }> = [];
-
-  async function walk(current: string): Promise<void> {
-    const entries = await readdir(current, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.name === "node_modules" || entry.name === ".git") continue;
-      const full = join(current, entry.name);
-      const rel = relative(localDir, full);
-      const remotePath = join(remoteDir, rel).replaceAll("\\", "/");
-      if (entry.isDirectory()) {
-        await sandbox.fs.createFolder(remotePath, "755");
-        await walk(full);
-      } else if (entry.isFile()) {
-        const info = await stat(full);
-        if (info.size === 0) {
-          // Daytona may reject empty files in some uploads; write via shell instead.
-          await sandbox.process.executeCommand(
-            `mkdir -p "$(dirname "${remotePath}")" && : > "${remotePath}"`,
-          );
-        } else {
-          files.push({ source: full, destination: remotePath });
-        }
-      }
-    }
-  }
-
-  await walk(localDir);
-
-  const chunkSize = 40;
-  for (let i = 0; i < files.length; i += chunkSize) {
-    await sandbox.fs.uploadFiles(files.slice(i, i + chunkSize), 600);
-  }
+export function shellQuote(value: string): string {
+  return "'" + value.replaceAll("'", "'\\''") + "'";
 }
 
 export function createSandboxClientFromEnv(
@@ -433,8 +207,6 @@ export function createSandboxClientFromEnv(
     apiUrl: env.DAYTONA_API_URL,
     target: env.DAYTONA_TARGET,
     snapshot: env.DAYTONA_SNAPSHOT || undefined,
-    runtimePort: env.RUNTIME_PORT ? Number(env.RUNTIME_PORT) : undefined,
     workspacePath: env.WORKSPACE_PATH,
-    piAgentDir: env.PI_AGENT_DIR,
   });
 }

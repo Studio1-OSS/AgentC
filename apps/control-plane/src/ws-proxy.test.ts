@@ -1,18 +1,15 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket } from "ws";
 import { expect, it, vi } from "vitest";
 import { attachUiWebSocketProxy } from "./ws-proxy.js";
 import { mintUiToken } from "./ui-tokens.js";
 import type { EnvironmentService } from "./services/environments.js";
-import { handleSessionSocket } from "../../../sandbox/runtime/src/socket.js";
-import type { PiSessionRegistry } from "../../../sandbox/runtime/src/pi.js";
+import type { PiSessionRegistry } from "@cloud-agent/agent-runtime";
 import type { ServerEvent } from "@cloud-agent/protocol";
 
-it("syncs missed events through the proxy and allows ping, reconnect and abort during a running prompt", async () => {
-  const runtime = new WebSocketServer({ port: 0, host: "127.0.0.1" });
-  await once(runtime, "listening");
+it("syncs session events directly from the server and allows ping, reconnect and abort during a running prompt", async () => {
   const server = createServer();
   const listeners = new Set<(event: ServerEvent) => void>();
   let running = false;
@@ -42,15 +39,8 @@ it("syncs missed events through the proxy and allows ping, reconnect and abort d
     },
     abort: async () => { running = false; finish(); },
   } as unknown as PiSessionRegistry;
-  runtime.on("connection", (socket) => void handleSessionSocket(socket, "session", registry));
   const service = {
-    openRuntimeSessionSocket: async () => {
-      const socket = new WebSocket(`ws://127.0.0.1:${(runtime.address() as AddressInfo).port}`);
-      await once(socket, "open");
-      // Events during this gap are missed; the browser must sync after attaching.
-      await new Promise((resolve) => setTimeout(resolve, 60));
-      return socket;
-    },
+    getRuntimeSessionRegistry: async () => registry,
   } as unknown as EnvironmentService;
   const proxy = attachUiWebSocketProxy(server, service, "test-secret");
   server.listen(0, "127.0.0.1");
@@ -86,10 +76,8 @@ it("syncs missed events through the proxy and allows ping, reconnect and abort d
   } finally {
     browsers.forEach((socket) => socket.terminate());
     proxy.clients.forEach((socket) => socket.terminate());
-    runtime.clients.forEach((socket) => socket.terminate());
     await Promise.all([
       new Promise<void>((resolve) => proxy.close(() => resolve())),
-      new Promise<void>((resolve) => runtime.close(() => resolve())),
       new Promise<void>((resolve) => server.close(() => resolve())),
     ]);
   }

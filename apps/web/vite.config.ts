@@ -14,10 +14,15 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/ui/api": "http://127.0.0.1:8787",
+      "/ui/api": {
+        target: "http://127.0.0.1:8787",
+        changeOrigin: false,
+        xfwd: true,
+      },
       "/ui/ws": {
         target: "ws://127.0.0.1:8787",
         ws: true,
+        xfwd: true,
       },
     },
   },

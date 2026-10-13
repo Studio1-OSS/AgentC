@@ -1,0 +1,148 @@
+/* ========================================================
+   NB International Pro & Geist Mono Typography
+   (No extra fonts: Inter, Lato, STK Bureau, etc. removed)
+   ======================================================== */
+
+/* NB International Pro - Light (100, 200, 300) */
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Light.woff2') format('woff2'),
+       url('./NBInternationalPro_Light.woff2') format('woff2');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Light.woff2') format('woff2'),
+       url('./NBInternationalPro_Light.woff2') format('woff2');
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Light.woff2') format('woff2'),
+       url('./NBInternationalPro_Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* NB International Pro - Regular & Semibold & Bold (400, 500, 600, 700, 800, 900, normal, bold) */
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NB International Pro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Aliases for 'nbInternationalPro' */
+@font-face {
+  font-family: 'nbInternationalPro';
+  src: url('/fonts/NBInternationalPro_Light.woff2') format('woff2'),
+       url('./NBInternationalPro_Light.woff2') format('woff2');
+  font-weight: 100 350;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'nbInternationalPro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: 351 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'nbInternationalPro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'nbInternationalPro';
+  src: url('/fonts/NBInternationalPro_Regular.woff2') format('woff2'),
+       url('./NBInternationalPro_Regular.woff2') format('woff2');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Geist Mono (Code & Monospace) */
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono_Regular.woff2') format('woff2'),
+       url('./GeistMono_Regular.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'geistMono';
+  src: url('/fonts/GeistMono_Regular.woff2') format('woff2'),
+       url('./GeistMono_Regular.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

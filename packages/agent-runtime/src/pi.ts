@@ -11,18 +11,22 @@ import {
   DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
+  SettingsManager,
+  type ToolDefinition,
   type AgentSession,
 } from "@earendil-works/pi-coding-agent";
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { mapPiEvent } from "./events.js";
-import { createPreviewTool, previewSystemPrompt } from "./preview.js";
+import { previewSystemPrompt } from "./preview.js";
 import { withModelFallback } from "./model-fallback.js";
-import { createSandboxBashTool } from "./bash.js";
 
 export type RuntimeConfig = {
   cwd: string;
   agentDir: string;
   previewPort?: number;
+  tools?: ToolDefinition[];
+  loadAgentsFiles?: (cwd: string) => Promise<{ path: string; content: string }[]>;
   /** Optional override; when omitted, resolved from process env / keys below. */
   llm?: LlmProviderConfig;
   provider?: string;
@@ -46,8 +50,8 @@ type ActiveSession = {
 };
 
 /**
- * Owns Pi AgentSessions inside the sandbox.
- * Conversation truth lives in ~/.pi/agent/sessions; this registry only keeps
+ * Owns Pi AgentSessions on the app server.
+ * Conversation truth lives in the server's durable agent directory; this registry keeps
  * in-memory handles for the lifetime of the runtime process.
  */
 export class PiSessionRegistry {
@@ -56,7 +60,6 @@ export class PiSessionRegistry {
   private modelRuntimePromise: Promise<ModelRuntime> | null = null;
 
   constructor(private readonly config: RuntimeConfig) {
-    mkdirSync(config.cwd, { recursive: true });
     mkdirSync(config.agentDir, { recursive: true });
   }
 
@@ -140,10 +143,21 @@ export class PiSessionRegistry {
     return model;
   }
 
+  private get sessionDir(): string {
+    return join(this.config.agentDir, "sessions");
+  }
+
   private async resourceLoader() {
+    const agentsFiles = await this.config.loadAgentsFiles?.(this.config.cwd) ?? [];
     const loader = new DefaultResourceLoader({
-      cwd: this.config.cwd,
+      cwd: this.config.agentDir,
       agentDir: this.config.agentDir,
+      noExtensions: true,
+      noSkills: true,
+      noPromptTemplates: true,
+      noThemes: true,
+      noContextFiles: true,
+      agentsFilesOverride: () => ({ agentsFiles }),
       appendSystemPromptOverride: (base) => [...base, previewSystemPrompt(this.config.previewPort)],
     });
     await loader.reload();
@@ -151,7 +165,7 @@ export class PiSessionRegistry {
   }
 
   async listSessions() {
-    const sessions = await SessionManager.list(this.config.cwd);
+    const sessions = await SessionManager.list(this.config.cwd, this.sessionDir);
     const listed = sessions.map((s) => ({
       id: s.id,
       path: s.path,
@@ -183,8 +197,10 @@ export class PiSessionRegistry {
       modelRuntime,
       model,
       resourceLoader: await this.resourceLoader(),
-      customTools: [createPreviewTool(this.config.previewPort), createSandboxBashTool(this.config.cwd)],
-      sessionManager: SessionManager.create(this.config.cwd),
+      tools: (this.config.tools ?? []).map((tool) => tool.name),
+      customTools: this.config.tools ?? [],
+      settingsManager: SettingsManager.inMemory(),
+      sessionManager: SessionManager.create(this.config.cwd, this.sessionDir),
     });
 
     const id = session.sessionId;
@@ -217,7 +233,7 @@ export class PiSessionRegistry {
   }
 
   private async loadSession(sessionId: string): Promise<{ id: string }> {
-    const sessions = await SessionManager.list(this.config.cwd);
+    const sessions = await SessionManager.list(this.config.cwd, this.sessionDir);
     const match = sessions.find((s) => s.id === sessionId);
     if (!match) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -232,8 +248,10 @@ export class PiSessionRegistry {
       modelRuntime,
       model,
       resourceLoader: await this.resourceLoader(),
-      customTools: [createPreviewTool(this.config.previewPort), createSandboxBashTool(this.config.cwd)],
-      sessionManager: SessionManager.open(match.path),
+      tools: (this.config.tools ?? []).map((tool) => tool.name),
+      customTools: this.config.tools ?? [],
+      settingsManager: SettingsManager.inMemory(),
+      sessionManager: SessionManager.open(match.path, this.sessionDir),
     });
 
     this.track(session, modelRuntime);

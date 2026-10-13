@@ -7,16 +7,16 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "pnpm -r --filter=./packages/* --filter=./apps/* --filter=./sandbox/* run build",
+    "build": "pnpm -r --filter \"!cloud-agent\" run build",
     "dev:control-plane": "pnpm --filter @cloud-agent/control-plane dev",
     "dev:web": "pnpm --filter @cloud-agent/web dev",
-    "dev:runtime": "pnpm --filter @cloud-agent/sandbox-runtime dev",
     "db:generate": "pnpm --filter @cloud-agent/database generate",
     "db:migrate": "pnpm --filter @cloud-agent/database migrate",
-    "typecheck": "pnpm -r --filter=./packages/* --filter=./apps/* --filter=./sandbox/* run typecheck",
-    "test": "pnpm --filter @cloud-agent/protocol test && pnpm --filter @cloud-agent/control-plane test && pnpm --filter @cloud-agent/web test && pnpm --filter @cloud-agent/sandbox-runtime test",
+    "typecheck": "pnpm -r --filter \"!cloud-agent\" run typecheck",
+    "test": "pnpm --filter @cloud-agent/protocol test && pnpm --filter @cloud-agent/control-plane test && pnpm --filter @cloud-agent/web test && pnpm --filter @cloud-agent/agent-runtime test",
     "spike": "pnpm --filter @cloud-agent/control-plane spike",
-    "cloud-agent": "pnpm --filter @cloud-agent/cli start"
+    "cloud-agent": "pnpm --filter @cloud-agent/cli start",
+    "start": "node apps/control-plane/dist/index.js"
   },
   "devDependencies": {
     "typescript": "^5.9.2"

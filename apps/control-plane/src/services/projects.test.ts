@@ -13,7 +13,7 @@ function setup() {
   const database = createDatabase(":memory:");
   databases.push(database);
   migrateDatabase(database.sqlite);
-  const config = { workspacePath: "/home/daytona/workspace/project", runtimePort: 4096, browserSessionSecret: "test-secret", runtimeAccessSecret: "runtime-secret" } as AppConfig;
+  const config = { workspacePath: "/home/daytona/workspace/project", browserSessionSecret: "test-secret", runtimeAccessSecret: "runtime-secret" } as AppConfig;
   const service = Object.create(EnvironmentService.prototype) as EnvironmentService;
   const runtime = new Map<string, Map<string, { title?: string; messages: unknown[] }>>();
   const fetchRuntime = vi.fn(async (_sandbox: unknown, path: string, init: RequestInit) => {
@@ -40,7 +40,14 @@ function setup() {
     configureWebPreview: vi.fn(async () => {}), fetchRuntime,
     connectRuntimeSessionWs: vi.fn(async () => ({})),
   };
-  Object.assign(service, { db: database.db, config, _sandboxes: sandboxes });
+  const registry = { openSession: vi.fn(async () => {}) };
+  Object.assign(service, { db: database.db, config, _sandboxes: sandboxes,
+    proxyRuntime: (userId: string, environmentId: string, path: string, init: RequestInit) => {
+      service.getProject(userId, environmentId);
+      return fetchRuntime(undefined, path, init);
+    },
+    getRuntime: vi.fn(async () => ({ projects: { get: vi.fn(() => registry) } })),
+  });
   database.db.insert(users).values([{ id: "owner", createdAt: "2026-01-01" }, { id: "other", createdAt: "2026-01-01" }]).run();
   database.db.insert(environments).values([
     { id: "workspace", userId: "owner", sandboxId: "shared-sandbox", name: "Original", status: "ready", createdAt: "2026-01-01", updatedAt: "2026-01-01" },
@@ -82,8 +89,8 @@ describe("projects and conversations in a shared sandbox", () => {
     await expect(service.openUiChat("owner", "workspace", { projectId: alpha.id, sessionId: unrelated.sessionRefId! })).rejects.toThrow("Conversation not found");
     expect(() => service.listProjects("other", "workspace")).toThrow("forbidden");
     expect(() => service.getProject("other", "other-workspace", alpha.id)).toThrow("Project not found");
-    await service.openRuntimeSessionSocket("owner", "workspace", first.piSessionId, alpha.id);
-    expect(sandboxes.connectRuntimeSessionWs).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ projectId: alpha.id, previewPort: 3001 }));
+    await service.getRuntimeSessionRegistry("owner", "workspace", first.piSessionId, alpha.id);
+    await expect(service.getRuntimeSessionRegistry("other", "workspace", first.piSessionId, alpha.id)).rejects.toThrow("forbidden");
   });
 
   it("bootstraps a vanished empty conversation by recreating it and handing back a new token", async () => {

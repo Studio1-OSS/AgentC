@@ -1,7 +1,7 @@
-import { createBashToolDefinition, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { createBashToolDefinition, type BashOperations, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 
-export function createSandboxBashTool(cwd: string): ToolDefinition {
-  const tool = createBashToolDefinition(cwd);
+export function createSandboxBashTool(cwd: string, operations?: BashOperations): ToolDefinition {
+  const tool = createBashToolDefinition(cwd, { operations, exposeSessionEnvironment: false });
   return {
     ...tool,
     // The chat UI renders tools itself; Pi's TUI callbacks are unused here.

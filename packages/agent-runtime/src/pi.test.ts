@@ -12,6 +12,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   createBashToolDefinition: vi.fn(() => ({ name: "bash", execute: vi.fn() })),
   DefaultResourceLoader: vi.fn(function () { return { reload: vi.fn() }; }),
   ModelRuntime: { create: vi.fn() },
+  SettingsManager: { inMemory: vi.fn() },
   SessionManager: { create: vi.fn(), open: vi.fn(), list: vi.fn() },
 }));
 const directories: string[] = [];
