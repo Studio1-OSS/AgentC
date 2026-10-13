@@ -1,3 +1,5 @@
+> Historical design: Pi now runs on the app server, with tools in Daytona. See [README.md](./README.md) for the current architecture and Railway setup.
+
 Remote Pi Environments
 A plan for running persistent Pi coding-agent sessions inside isolated remote sandboxes, with a thin web/control layer for creating environments, reconnecting to sessions, streaming agent activity, and previewing applications.
 

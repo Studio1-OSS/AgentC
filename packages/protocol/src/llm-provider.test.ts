@@ -6,7 +6,6 @@ import {
   NEBIUS_PROVIDER_ID,
   OPENROUTER_PROVIDER_ID,
   buildOpenRouterPiProviderRegistration,
-  buildSandboxModelEnv,
   resolveLlmProviderConfig,
 } from "./llm-provider.js";
 
@@ -23,14 +22,14 @@ describe("resolveLlmProviderConfig", () => {
     expect(config.apiKeyEnvVar).toBe("OPENROUTER_API_KEY");
   });
 
-  it("prefers OpenRouter over Nebius when both keys are present", () => {
+  it("prefers Nebius over OpenRouter when both keys are present", () => {
     const config = resolveLlmProviderConfig({
       OPENROUTER_API_KEY: "test-or-key",
       NEBIUS_API_KEY: "test-nebius-key",
       PI_MODEL: "deepseek/deepseek-v4.1-flash",
     });
 
-    expect(config.providerId).toBe(OPENROUTER_PROVIDER_ID);
+    expect(config.providerId).toBe(NEBIUS_PROVIDER_ID);
     expect(config.modelId).toBe("deepseek/deepseek-v4.1-flash");
   });
 
@@ -50,26 +49,6 @@ describe("resolveLlmProviderConfig", () => {
 
     expect(config.providerId).toBe("anthropic");
     expect(config.apiKeyEnvVar).toBe("ANTHROPIC_API_KEY");
-  });
-});
-
-describe("buildSandboxModelEnv", () => {
-  it("retains OpenRouter credentials for fallback when the primary provider is different", () => {
-    const env = buildSandboxModelEnv({ PI_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "primary-key", OPENROUTER_API_KEY: "fallback-key" });
-    expect(env).toMatchObject({ PI_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "primary-key", OPENROUTER_API_KEY: "fallback-key", OPENROUTER_BASE_URL: DEFAULT_OPENROUTER_BASE_URL });
-  });
-  it("injects OpenRouter key and provider settings for sandboxes", () => {
-    const env = buildSandboxModelEnv({
-      OPENROUTER_API_KEY: "test-or-key",
-      PI_MODEL: "deepseek/deepseek-v4.1-flash",
-    });
-
-    expect(env).toMatchObject({
-      OPENROUTER_API_KEY: "test-or-key",
-      PI_PROVIDER: OPENROUTER_PROVIDER_ID,
-      PI_MODEL: "deepseek/deepseek-v4.1-flash",
-      OPENROUTER_BASE_URL: DEFAULT_OPENROUTER_BASE_URL,
-    });
   });
 });
 

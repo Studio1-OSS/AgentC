@@ -91,3 +91,10 @@ attachUiWebSocketProxy(
 );
 
 export { app, service, config };
+
+const shutdown = async () => {
+  await service.disposeAll();
+  server.close(() => process.exit(0));
+};
+process.on("SIGINT", () => { void shutdown(); });
+process.on("SIGTERM", () => { void shutdown(); });

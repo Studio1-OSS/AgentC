@@ -10,6 +10,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   createAgentSession: vi.fn(), ModelRuntime: { create: vi.fn() },
   createBashToolDefinition: vi.fn(() => ({ name: "bash", execute: vi.fn() })),
   DefaultResourceLoader: vi.fn(function () { return { reload: vi.fn() }; }),
+  SettingsManager: { inMemory: vi.fn() },
   SessionManager: { create: vi.fn(), open: vi.fn(), list: vi.fn() },
 }));
 let directory: string;
@@ -40,10 +41,11 @@ describe("project conversation registries", () => {
     expect(createAgentSession).toHaveBeenNthCalledWith(1, expect.objectContaining({ cwd: join(directory, "project") }));
     expect(createAgentSession).toHaveBeenNthCalledWith(2, expect.objectContaining({ cwd: join(directory, "projects", projectId) }));
     const options = vi.mocked(createAgentSession).mock.calls[1]![0]!;
-    expect(options.customTools?.[0]?.description).toContain("3001");
+    expect(options.tools).toEqual([]);
+    expect(options.agentDir).toBe(join(directory, ".pi", projectId));
     await expect(additional.openSession(first.id)).rejects.toThrow("Session not found");
     expect(() => original.getOrThrow(second.id)).toThrow("not open");
-    expect(SessionManager.list).toHaveBeenCalledWith(join(directory, "projects", projectId));
+    expect(SessionManager.list).toHaveBeenCalledWith(join(directory, "projects", projectId), join(directory, ".pi", projectId, "sessions"));
   });
   it("allows separate projects to run independently and lists empty active chats", async () => {
     const projects = setup();

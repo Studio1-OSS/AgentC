@@ -1,12 +1,13 @@
 import type { Server as HttpServer, IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer } from "ws";
 import type { EnvironmentService } from "./services/environments.js";
+import { handleSessionSocket } from "@cloud-agent/agent-runtime";
 import { verifyUiToken } from "./ui-tokens.js";
 
 /**
- * Browser → control-plane WS → Daytona runtime WS.
- * Browser never sees RUNTIME_ACCESS_SECRET or Daytona preview tokens.
+ * Browser → server-side Pi; its tools execute through the Daytona SDK.
+ * Browser never sees model or Daytona credentials.
  */
 export function attachUiWebSocketProxy(
   server: HttpServer,
@@ -47,7 +48,7 @@ async function handleUpgrade(
       return;
     }
 
-    const upstream = await service.openRuntimeSessionSocket(
+    const registry = await service.getRuntimeSessionRegistry(
       payload.userId,
       payload.environmentId,
       payload.piSessionId,
@@ -55,7 +56,7 @@ async function handleUpgrade(
     );
 
     wss.handleUpgrade(req, socket, head, (client) => {
-      pipeSockets(client, upstream);
+      void handleSessionSocket(client, payload.piSessionId, registry);
     });
   } catch (err) {
     try {
@@ -66,35 +67,4 @@ async function handleUpgrade(
     socket.destroy();
     console.error("UI WS upgrade failed", err);
   }
-}
-
-function pipeSockets(client: WebSocket, upstream: WebSocket): void {
-  const closeBoth = () => {
-    try {
-      if (client.readyState === WebSocket.OPEN) client.close();
-    } catch {
-      // ignore
-    }
-    try {
-      if (upstream.readyState === WebSocket.OPEN) upstream.close();
-    } catch {
-      // ignore
-    }
-  };
-
-  client.on("message", (data, isBinary) => {
-    if (upstream.readyState === WebSocket.OPEN) {
-      upstream.send(data, { binary: isBinary });
-    }
-  });
-  upstream.on("message", (data, isBinary) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(data, { binary: isBinary });
-    }
-  });
-
-  client.on("close", closeBoth);
-  upstream.on("close", closeBoth);
-  client.on("error", closeBoth);
-  upstream.on("error", closeBoth);
 }

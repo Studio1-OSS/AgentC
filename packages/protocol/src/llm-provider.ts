@@ -1,7 +1,7 @@
 export const OPENROUTER_PROVIDER_ID = "openrouter" as const;
 export const NEBIUS_PROVIDER_ID = "nebius" as const;
 
-/** Daytona Tier 1/2 allowlists openrouter.ai — preferred for sandboxes. */
+/** Optional OpenRouter provider and fallback. */
 export const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3-235b-a22b-2507";
 
@@ -24,12 +24,40 @@ export type LlmProviderConfig = {
 
 /**
  * Resolve which LLM provider the runtime/control-plane should use.
- * OpenRouter wins when OPENROUTER_API_KEY is set (Daytona-reachable).
+ * Nebius wins when both keys are present; model calls originate on the app server.
  */
 export function resolveLlmProviderConfig(
   env: Record<string, string | undefined>,
 ): LlmProviderConfig {
   const explicitProvider = env.PI_PROVIDER?.trim();
+
+  if (
+    env.NEBIUS_API_KEY &&
+    (!explicitProvider || explicitProvider === NEBIUS_PROVIDER_ID)
+  ) {
+    return {
+      providerId: NEBIUS_PROVIDER_ID,
+      modelId: env.PI_MODEL?.trim() || DEFAULT_NEBIUS_MODEL,
+      apiKey: env.NEBIUS_API_KEY,
+      apiKeyEnvVar: "NEBIUS_API_KEY",
+      baseUrl: env.NEBIUS_BASE_URL?.trim() || DEFAULT_NEBIUS_BASE_URL,
+      api: "openai-completions",
+    };
+  }
+
+  if (explicitProvider === NEBIUS_PROVIDER_ID) {
+    if (!env.NEBIUS_API_KEY) {
+      throw new Error("PI_PROVIDER=nebius requires NEBIUS_API_KEY");
+    }
+    return {
+      providerId: NEBIUS_PROVIDER_ID,
+      modelId: env.PI_MODEL?.trim() || DEFAULT_NEBIUS_MODEL,
+      apiKey: env.NEBIUS_API_KEY,
+      apiKeyEnvVar: "NEBIUS_API_KEY",
+      baseUrl: env.NEBIUS_BASE_URL?.trim() || DEFAULT_NEBIUS_BASE_URL,
+      api: "openai-completions",
+    };
+  }
 
   if (
     env.OPENROUTER_API_KEY &&
@@ -70,34 +98,6 @@ export function resolveLlmProviderConfig(
   }
 
   if (
-    env.NEBIUS_API_KEY &&
-    (!explicitProvider || explicitProvider === NEBIUS_PROVIDER_ID)
-  ) {
-    return {
-      providerId: NEBIUS_PROVIDER_ID,
-      modelId: env.PI_MODEL?.trim() || DEFAULT_NEBIUS_MODEL,
-      apiKey: env.NEBIUS_API_KEY,
-      apiKeyEnvVar: "NEBIUS_API_KEY",
-      baseUrl: env.NEBIUS_BASE_URL?.trim() || DEFAULT_NEBIUS_BASE_URL,
-      api: "openai-completions",
-    };
-  }
-
-  if (explicitProvider === NEBIUS_PROVIDER_ID) {
-    if (!env.NEBIUS_API_KEY) {
-      throw new Error("PI_PROVIDER=nebius requires NEBIUS_API_KEY");
-    }
-    return {
-      providerId: NEBIUS_PROVIDER_ID,
-      modelId: env.PI_MODEL?.trim() || DEFAULT_NEBIUS_MODEL,
-      apiKey: env.NEBIUS_API_KEY,
-      apiKeyEnvVar: "NEBIUS_API_KEY",
-      baseUrl: env.NEBIUS_BASE_URL?.trim() || DEFAULT_NEBIUS_BASE_URL,
-      api: "openai-completions",
-    };
-  }
-
-  if (
     env.ANTHROPIC_API_KEY &&
     (!explicitProvider || explicitProvider === "anthropic")
   ) {
@@ -124,36 +124,8 @@ export function resolveLlmProviderConfig(
   }
 
   throw new Error(
-    "No LLM API key found. Set OPENROUTER_API_KEY (preferred for Daytona), NEBIUS_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY.",
+    "No LLM API key found. Set NEBIUS_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY.",
   );
-}
-
-/**
- * Environment variables injected into each Daytona sandbox so the in-sandbox
- * Pi runtime can authenticate to the configured provider.
- */
-export function buildSandboxModelEnv(
-  env: Record<string, string | undefined>,
-): Record<string, string> {
-  const config = resolveLlmProviderConfig(env);
-  const out: Record<string, string> = {
-    PI_PROVIDER: config.providerId,
-    PI_MODEL: config.modelId,
-    [config.apiKeyEnvVar]: config.apiKey,
-  };
-
-  if (config.providerId === OPENROUTER_PROVIDER_ID && config.baseUrl) {
-    out.OPENROUTER_BASE_URL = config.baseUrl;
-  }
-  if (config.providerId === NEBIUS_PROVIDER_ID && config.baseUrl) {
-    out.NEBIUS_BASE_URL = config.baseUrl;
-  }
-  if (env.OPENROUTER_API_KEY) {
-    out.OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
-    out.OPENROUTER_BASE_URL = env.OPENROUTER_BASE_URL?.trim() || DEFAULT_OPENROUTER_BASE_URL;
-  }
-
-  return out;
 }
 
 /** Pi `registerProvider` payload for OpenAI-compatible gateways (OpenRouter / Nebius). */
