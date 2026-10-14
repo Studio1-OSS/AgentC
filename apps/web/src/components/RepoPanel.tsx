@@ -13,6 +13,8 @@ export type TerminalEntry = { command: string; output: string[] };
 
 type RepoPanelProps = {
   repo: string;
+  /** False for an empty workspace: no branch or pull request to show. */
+  hasRepo?: boolean;
   branch: string;
   baseBranch?: string;
   title: string;
@@ -82,6 +84,7 @@ function EmptyState({ icon, title, text }: { icon: ReactNode; title: string; tex
 
 export function RepoPanel({
   repo,
+  hasRepo = true,
   branch,
   baseBranch = "main",
   title,
@@ -129,7 +132,7 @@ export function RepoPanel({
       <div className="rp-body">
         {tab === "changes" && (
           <>
-            <div className="rp-branch-row">
+            {hasRepo && <div className="rp-branch-row">
               <div className="rp-branch">
                 <span className="rp-branch-pill">
                   <GitBranch size={12} />
@@ -182,7 +185,7 @@ export function RepoPanel({
                   </div>
                 )}
               </div>
-            </div>
+            </div>}
 
             <h3 className="rp-title">{title}</h3>
 
@@ -216,7 +219,7 @@ export function RepoPanel({
                 <EmptyState
                   icon={<FileCode2 size={18} />}
                   title="No changes yet"
-                  text="Edits the agent makes in this repository will appear here as a diff."
+                  text={`Edits the agent makes in this ${hasRepo ? "repository" : "workspace"} will appear here as a diff.`}
                 />
               ))}
 
@@ -254,7 +257,11 @@ export function RepoPanel({
                   ))}
                 </ul>
               ) : (
-                <EmptyState icon={<GitCommitHorizontal size={18} />} title="No commits yet" text={`Commits on ${branch} will be listed here.`} />
+                <EmptyState
+                  icon={<GitCommitHorizontal size={18} />}
+                  title="No commits yet"
+                  text={hasRepo ? `Commits on ${branch} will be listed here.` : "Each turn that edits files will be listed here."}
+                />
               ))}
           </>
         )}
@@ -262,17 +269,21 @@ export function RepoPanel({
         {tab === "environment" && (
           <dl className="rp-env">
             <div>
-              <dt>Repository</dt>
+              <dt>{hasRepo ? "Repository" : "Workspace"}</dt>
               <dd>{repo}</dd>
             </div>
-            <div>
-              <dt>Working branch</dt>
-              <dd className="mono">{branch}</dd>
-            </div>
-            <div>
-              <dt>Base branch</dt>
-              <dd className="mono">{baseBranch}</dd>
-            </div>
+            {hasRepo && (
+              <>
+                <div>
+                  <dt>Working branch</dt>
+                  <dd className="mono">{branch}</dd>
+                </div>
+                <div>
+                  <dt>Base branch</dt>
+                  <dd className="mono">{baseBranch}</dd>
+                </div>
+              </>
+            )}
             <div>
               <dt>Sandbox</dt>
               <dd>Daytona Cloud MicroVM</dd>

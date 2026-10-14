@@ -13,6 +13,8 @@ import {
   ArrowUp,
   Plus,
   Github,
+  Mail,
+  ArrowUpRight,
   GitBranch,
   ChevronRight,
   ChevronDown,
@@ -458,13 +460,30 @@ export function App() {
     wasBusy.current = live.busy;
   }, [live.busy, live.items, live.bootstrap, token, notify]);
 
+  // Swap an auto-generated "workspace-1a2b3c4d" name for a title based on the first prompt.
+  const namedWorkspaces = useRef(new Set<string>());
+  const nameFromPrompt = useCallback((text: string) => {
+    const id = live.bootstrap?.environmentId ?? currentWorkspace.current;
+    if (!id || namedWorkspaces.current.has(id)) return;
+    if (workspaces.find((w) => w.id === id)?.name !== `workspace-${id.slice(0, 8)}`) return;
+    namedWorkspaces.current.add(id);
+    api<Workspace>(`/${id}/name-from-prompt`, "POST", { prompt: text })
+      .then((renamed) => {
+        if (!mounted.current) return;
+        setWorkspaces((list) => list.map((w) => (w.id === renamed.id ? { ...w, name: renamed.name } : w)));
+        setSelected((current) => (current?.id === renamed.id ? { ...current, name: renamed.name } : current));
+      })
+      .catch(() => namedWorkspaces.current.delete(id));
+  }, [live.bootstrap?.environmentId, workspaces]);
+
   // A prompt typed before the workspace finished connecting is sent once it can be.
   useEffect(() => {
     if (!token || live.conn !== "ready" || live.busy || !pendingPrompt.current) return;
     const text = pendingPrompt.current;
     pendingPrompt.current = null;
     live.sendPrompt(text);
-  }, [token, live.conn, live.busy, live.sendPrompt]);
+    nameFromPrompt(text);
+  }, [token, live.conn, live.busy, live.sendPrompt, nameFromPrompt]);
 
   useEffect(() => {
     if (!modal) return;
@@ -723,6 +742,7 @@ export function App() {
       // Keep the text in the box until the agent can actually take it.
       if (live.conn !== "ready" || live.busy) return;
       live.sendPrompt(promptText);
+      nameFromPrompt(promptText);
       setCentralPrompt("");
       return;
     }
@@ -1813,10 +1833,14 @@ export function App() {
                 className="devin-support-card"
                 onClick={() => setSupportModal(false)}
               >
+                <span className="devin-support-icon-wrap" aria-hidden="true">
+                  <Mail size={17} />
+                </span>
                 <div className="devin-settings-item-text">
                   <div className="devin-settings-item-title">Email Support</div>
                   <div className="devin-settings-item-desc">support@daytona.io (Average reply &lt; 2h)</div>
                 </div>
+                <ArrowUpRight size={16} className="devin-support-arrow" aria-hidden="true" />
               </a>
               <a
                 href="https://github.com/Studio1-OSS/cloud-agent/issues"
@@ -1824,10 +1848,14 @@ export function App() {
                 rel="noopener noreferrer"
                 className="devin-support-card"
               >
+                <span className="devin-support-icon-wrap" aria-hidden="true">
+                  <Github size={17} />
+                </span>
                 <div className="devin-settings-item-text">
                   <div className="devin-settings-item-title">GitHub Community</div>
                   <div className="devin-settings-item-desc">Open bug reports & feature discussions</div>
                 </div>
+                <ArrowUpRight size={16} className="devin-support-arrow" aria-hidden="true" />
               </a>
             </div>
           </section>
@@ -2462,19 +2490,25 @@ export function App() {
         .filter((step) => step.icon === "run")
         .map((step) => ({ command: step.chip, output: step.detail.map((d) => d.text) })),
     );
-    const showPanel = !!connectedRepo && repoPanelOpen;
+    // Live sessions without a repository still get the panel for the sandbox's changes and commands.
+    const panelLabel = connectedRepo ?? (token ? selected?.name ?? "Workspace" : null);
+    const showPanel = !!panelLabel && repoPanelOpen;
 
     return (
       <div className={`devin-conversation-layout ${showPanel ? "has-repo-panel" : ""}`}>
         <div className="devin-conversation-main">
-        {connectedRepo && (
+        {panelLabel && (
           <div className="devin-conversation-header">
             <div className="devin-connected-repo-pill">
-              <Github size={14} className="text-zinc-400" />
-              <span className="font-semibold text-zinc-100">{connectedRepo}</span>
-              <span className="devin-repo-branch-pill">main</span>
-              <span className="devin-repo-status-dot">●</span>
-              <span className="devin-repo-status-text">Synced</span>
+              {connectedRepo ? <Github size={14} className="devin-connected-repo-icon" /> : <Box size={14} className="devin-connected-repo-icon" />}
+              <span className="devin-connected-repo-name">{panelLabel}</span>
+              {connectedRepo && (
+                <>
+                  <span className="devin-repo-branch-pill">main</span>
+                  <span className="devin-repo-status-dot">●</span>
+                  <span className="devin-repo-status-text">Synced</span>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {!repoPanelOpen && (
@@ -2488,23 +2522,27 @@ export function App() {
                   <span>Changes</span>
                 </button>
               )}
-              <button
-                type="button"
-                className="devin-header-action-btn"
-                onClick={() => setGhConnectModal(true)}
-                title="Switch repository"
-              >
-                <GitBranch size={13} />
-                <span>Switch Repo</span>
-              </button>
-              <button
-                type="button"
-                className="devin-header-action-btn text-zinc-400 hover:text-red-400"
-                onClick={home}
-                title="Disconnect repository"
-              >
-                Disconnect
-              </button>
+              {connectedRepo && (
+                <>
+                  <button
+                    type="button"
+                    className="devin-header-action-btn"
+                    onClick={() => setGhConnectModal(true)}
+                    title="Switch repository"
+                  >
+                    <GitBranch size={13} />
+                    <span>Switch Repo</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="devin-header-action-btn text-zinc-400 hover:text-red-400"
+                    onClick={home}
+                    title="Disconnect repository"
+                  >
+                    Disconnect
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -2657,9 +2695,10 @@ export function App() {
         </div>
         </div>
 
-        {showPanel && connectedRepo && (
+        {showPanel && panelLabel && (
           <RepoPanel
-            repo={connectedRepo}
+            repo={panelLabel}
+            hasRepo={!!connectedRepo}
             branch={`agent/${branchSlug}`}
             title={sessionTitle}
             commits={commits}

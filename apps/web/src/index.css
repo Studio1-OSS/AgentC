@@ -11219,3 +11219,369 @@ textarea:focus {
 .sidebar.devin-sidebar.collapsed .devin-nav-item {
   border-radius: 11px !important;
 }
+
+/* ==========================================================================
+   Dark Mode: chat code blocks, inline code and tables in neutral greys
+   ========================================================================== */
+.dashboard.theme-zinc .code-block {
+  background: #161618;
+  border-color: #2a2a2e;
+}
+.dashboard.theme-zinc .code-header {
+  background: #1c1c1f;
+  border-bottom-color: #2a2a2e;
+  color: #a1a1aa;
+}
+.dashboard.theme-zinc .code-header button {
+  color: #a1a1aa;
+  border-radius: 4px;
+  padding: 2px 6px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.dashboard.theme-zinc .code-header button:hover {
+  color: #fafafa;
+  background: rgba(255, 255, 255, 0.08);
+}
+.dashboard.theme-zinc .markdown pre code {
+  color: #e4e4e7;
+}
+.dashboard.theme-zinc .markdown :not(pre) > code {
+  background: #27272a;
+  color: #e4e4e7;
+  border: 1px solid #333338;
+}
+.dashboard.theme-zinc .hljs-keyword,
+.dashboard.theme-zinc .hljs-selector-tag,
+.dashboard.theme-zinc .hljs-literal {
+  color: #c4a7e7;
+}
+.dashboard.theme-zinc .hljs-string,
+.dashboard.theme-zinc .hljs-attr,
+.dashboard.theme-zinc .hljs-addition {
+  color: #a3d9a5;
+}
+.dashboard.theme-zinc .hljs-number,
+.dashboard.theme-zinc .hljs-built_in {
+  color: #f0b27a;
+}
+.dashboard.theme-zinc .hljs-title,
+.dashboard.theme-zinc .hljs-function {
+  color: #8ab4f8;
+}
+.dashboard.theme-zinc .hljs-comment,
+.dashboard.theme-zinc .hljs-quote {
+  color: #71717a;
+}
+.dashboard.theme-zinc .hljs-deletion {
+  color: #f28b82;
+}
+.dashboard.theme-zinc .hljs-meta {
+  color: #d4b483;
+}
+.dashboard.theme-zinc .markdown-table,
+.dashboard.theme-zinc .markdown th,
+.dashboard.theme-zinc .markdown td {
+  border-color: #2a2a2e;
+}
+.dashboard.theme-zinc .markdown th {
+  background: #1c1c1f;
+  color: #fafafa;
+}
+.dashboard.theme-zinc .markdown tr:nth-child(even) {
+  background: #141416;
+}
+
+/* ==========================================================================
+   Dark Mode: prompt composer in neutral greyish black (no blue tint)
+   ========================================================================== */
+.dashboard.theme-zinc .devin-prompt-card,
+.dashboard.theme-zinc .devin-prompt-card.liquid-glass-card {
+  background: #18181a;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-color: #2a2a2d;
+}
+.dashboard.theme-zinc .devin-prompt-textarea::placeholder {
+  color: #8a8a90 !important;
+}
+.dashboard.theme-zinc .devin-agent-btn,
+.dashboard.theme-zinc .devin-model-btn {
+  background: #222225 !important;
+  border-color: #333336 !important;
+}
+.dashboard.theme-zinc .devin-agent-btn:hover,
+.dashboard.theme-zinc .devin-model-btn:hover {
+  background: #2a2a2d !important;
+  border-color: #444448 !important;
+}
+.dashboard.theme-zinc .devin-tool-btn {
+  color: #b4b4b8 !important;
+}
+
+/* Dark Mode: send pill is solid white with dark icons instead of navy glass */
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send,
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send:hover {
+  background: #fafafa !important;
+  border: 1px solid #ffffff !important;
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.6) !important;
+}
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send:hover {
+  background: #e4e4e7 !important;
+}
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send::before {
+  display: none;
+}
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send .devin-split-send-main,
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send .devin-split-send-caret-btn {
+  color: #18181b !important;
+}
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send .devin-split-send-caret-btn {
+  border-left-color: rgba(0, 0, 0, 0.12) !important;
+}
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send .devin-split-send-main:hover,
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send .devin-split-send-caret-btn:hover,
+.dashboard.theme-zinc .devin-split-send-wrap .devin-split-send-pill.can-send .devin-split-send-caret-btn.active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Contact Support: icon tile + trailing arrow on each card */
+.devin-support-icon-wrap {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  color: #e4e4e7;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.dashboard:not(.theme-zinc) .devin-support-icon-wrap,
+.dashboard[data-theme="light"] .devin-support-icon-wrap {
+  background: #ffffff;
+  color: #18181b;
+  border-color: #e2e8f0;
+}
+.devin-support-card .devin-settings-item-text {
+  flex: 1;
+  min-width: 0;
+}
+.devin-support-arrow {
+  flex-shrink: 0;
+  color: #71717a;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.devin-support-card:hover .devin-support-arrow {
+  color: currentColor;
+  transform: translate(1px, -1px);
+}
+
+/* Sidebar session names act like buttons: clicking them never selects text */
+.devin-session-list,
+.devin-session-row-btn,
+.devin-session-name {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Light mode: neutral grey text selection instead of indigo */
+.dashboard:not(.theme-zinc) ::selection,
+.dashboard:not(.theme-zinc) input::selection,
+.dashboard:not(.theme-zinc) textarea::selection {
+  background: #d4d4d8;
+  color: #09090b;
+}
+
+/* Light mode: the open session is a soft grey row with dark text */
+.dashboard:not(.theme-zinc) .devin-session-row-wrap:hover {
+  background: #f4f4f5;
+}
+.dashboard:not(.theme-zinc) .devin-session-row-wrap.active {
+  background: #ececee;
+}
+.dashboard:not(.theme-zinc) .devin-session-row-wrap .devin-session-name {
+  color: #27272a;
+}
+.dashboard:not(.theme-zinc) .devin-session-row-wrap.active .devin-session-name {
+  color: #09090b;
+  font-weight: 500;
+}
+
+/* Conversation header pill: readable name in both themes, neutral greys */
+.devin-connected-repo-name {
+  font-weight: 600;
+  color: #f4f4f5;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.devin-connected-repo-icon {
+  flex-shrink: 0;
+  color: #a1a1aa;
+}
+.devin-repo-status-text {
+  color: #a1a1aa;
+}
+.dashboard:not(.theme-zinc) .devin-connected-repo-pill,
+.dashboard[data-theme="light"] .devin-connected-repo-pill {
+  background: #f4f4f5;
+  border-color: #e4e4e7;
+  color: #18181b;
+}
+.dashboard:not(.theme-zinc) .devin-connected-repo-name,
+.dashboard[data-theme="light"] .devin-connected-repo-name {
+  color: #18181b;
+}
+.dashboard:not(.theme-zinc) .devin-connected-repo-icon,
+.dashboard:not(.theme-zinc) .devin-repo-status-text,
+.dashboard[data-theme="light"] .devin-connected-repo-icon,
+.dashboard[data-theme="light"] .devin-repo-status-text {
+  color: #71717a;
+}
+.dashboard:not(.theme-zinc) .devin-repo-branch-pill,
+.dashboard[data-theme="light"] .devin-repo-branch-pill {
+  background: #e4e4e7;
+  color: #52525b;
+}
+
+/* ==========================================================================
+   Composer: one solid, flat look in both themes. No glass blur, no glow,
+   and focusing it changes nothing.
+   ========================================================================== */
+.dashboard:not(.theme-zinc) .devin-prompt-card,
+.dashboard:not(.theme-zinc) .devin-prompt-card:focus-within,
+.dashboard:not(.theme-zinc) .devin-prompt-card.liquid-glass-card,
+.dashboard:not(.theme-zinc) .devin-prompt-card.liquid-glass-card:focus-within,
+.dashboard:not(.theme-zinc) .devin-docked-card-inner,
+.dashboard:not(.theme-zinc) .devin-docked-card-inner:focus-within {
+  background: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: none !important;
+}
+.dashboard.theme-zinc .devin-prompt-card,
+.dashboard.theme-zinc .devin-prompt-card:focus-within,
+.dashboard.theme-zinc .devin-prompt-card.liquid-glass-card,
+.dashboard.theme-zinc .devin-prompt-card.liquid-glass-card:focus-within,
+.dashboard.theme-zinc .devin-docked-card-inner,
+.dashboard.theme-zinc .devin-docked-card-inner:focus-within {
+  background: #18181a !important;
+  border: 1px solid #2a2a2d !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: none !important;
+}
+.dashboard:not(.theme-zinc) .devin-prompt-card .devin-card-banner {
+  background: #fafafa;
+  border-bottom: 1px solid #f4f4f5;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.dashboard:not(.theme-zinc) .devin-prompt-textarea {
+  color: #18181b !important;
+}
+.dashboard:not(.theme-zinc) .devin-prompt-textarea::placeholder {
+  color: #a1a1aa !important;
+}
+
+/* ==========================================================================
+   Light mode chat output: neutral greys with clear contrast
+   ========================================================================== */
+.dashboard:not(.theme-zinc) .devin-asst-message-text,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown p,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown li,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown td,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown blockquote {
+  color: #27272a !important;
+}
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown h1,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown h2,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown h3,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown h4,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown strong,
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown th {
+  color: #09090b !important;
+}
+.dashboard:not(.theme-zinc) .devin-asst-message-text .markdown a {
+  color: #18181b !important;
+  text-decoration-color: #a1a1aa;
+}
+.dashboard:not(.theme-zinc) .markdown :not(pre) > code {
+  background: #f4f4f5;
+  color: #27272a;
+  border: 1px solid #e4e4e7;
+}
+.dashboard:not(.theme-zinc) .code-block {
+  background: #fafafa;
+  border-color: #e4e4e7;
+}
+.dashboard:not(.theme-zinc) .code-header {
+  background: #f4f4f5;
+  border-bottom-color: #e4e4e7;
+  color: #71717a;
+}
+.dashboard:not(.theme-zinc) .code-header button {
+  color: #71717a;
+}
+.dashboard:not(.theme-zinc) .markdown pre code {
+  color: #27272a;
+}
+.dashboard:not(.theme-zinc) .devin-user-bubble {
+  background: #f4f4f5 !important;
+  border-color: #e4e4e7 !important;
+}
+.dashboard:not(.theme-zinc) .devin-user-bubble,
+.dashboard:not(.theme-zinc) .devin-user-bubble p {
+  color: #18181b !important;
+}
+.dashboard:not(.theme-zinc) .thinking-trace {
+  --tt-ink: #18181b;
+  --tt-ink-2: #52525b;
+  --tt-ink-3: #a1a1aa;
+}
+/* Agent run UI and side panel tokens: zinc greys instead of blue-slate */
+.dashboard:not(.theme-zinc) .devin-conversation-layout,
+.tool-calls-preview:not(.dark) {
+  --ag-ink: #18181b;
+  --ag-ink-2: #52525b;
+  --ag-ink-3: #a1a1aa;
+  --ag-line: #e4e4e7;
+  --ag-field: #fafafa;
+  --ag-hover: rgba(0, 0, 0, 0.04);
+}
+
+/* ==========================================================================
+   Side panel terminal: soft grey instead of pure black
+   ========================================================================== */
+.rp-terminal {
+  background: #161618;
+  border: 1px solid #2a2a2d;
+}
+.dashboard:not(.theme-zinc) .rp-terminal {
+  background: #f4f4f5;
+  border-color: #e4e4e7;
+}
+.dashboard:not(.theme-zinc) .rp-terminal-cmd {
+  color: #18181b;
+  font-weight: 500;
+}
+.dashboard:not(.theme-zinc) .rp-terminal-prompt {
+  color: #16a34a;
+}
+.dashboard:not(.theme-zinc) .rp-terminal-out {
+  color: #52525b;
+}
+
+/* Conversation header pill: flat, no glow */
+.dashboard .devin-connected-repo-pill {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.dashboard .devin-repo-status-dot {
+  text-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
+}
