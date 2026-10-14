@@ -135,6 +135,14 @@ export function createBrowserRoutes(
       await service.resumeUiChat(c.get("userId"), c.req.param("id")),
     );
   });
+  app.post("/environments/:id/name-from-prompt", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { prompt?: unknown } | null;
+    const prompt = typeof body?.prompt === "string" ? body.prompt : "";
+    if (!prompt.trim()) return c.json({ error: "prompt is required" }, 400);
+    return c.json(
+      await service.nameFromPrompt(c.get("userId"), c.req.param("id"), prompt),
+    );
+  });
   app.post("/environments/:id/start", async (c) =>
     c.json(await service.start(c.get("userId"), c.req.param("id"))),
   );

@@ -26,6 +26,7 @@ import {
 import { ProjectRegistries, createRuntimeApp, createRemoteTools, loadRemoteAgentsFiles, importSandboxSessions } from "@cloud-agent/agent-runtime";
 import type { AppConfig } from "../config.js";
 import { mintUiToken, verifyUiToken } from "../ui-tokens.js";
+import { titleFromPrompt } from "./titles.js";
 import { dirname, join } from "node:path";
 
 function nowIso(): string {
@@ -726,12 +727,33 @@ export class EnvironmentService {
     return row;
   }
 
+  /** Renames an auto-named workspace after the first thing the user asked it to do. */
+  async nameFromPrompt(userId: string, id: string, prompt: string) {
+    const row = this.requireOwned(userId, id);
+    if (!hasDefaultName(row)) return toEnvironmentDto(row);
+    const name = await titleFromPrompt(prompt, this.config.llm);
+    // Another request may have named it while the model was answering.
+    const current = this.requireOwned(userId, id);
+    if (!hasDefaultName(current)) return toEnvironmentDto(current);
+    const updatedAt = nowIso();
+    this.db
+      .update(environments)
+      .set({ name, updatedAt })
+      .where(eq(environments.id, id))
+      .run();
+    return toEnvironmentDto({ ...current, name, updatedAt });
+  }
+
   private requireOwned(userId: string, id: string): EnvironmentRow {
     const row = this.requireRow(id);
     if (row.userId !== userId) throw new Error("forbidden");
     if (row.status === "deleted") throw new Error("Environment deleted");
     return row;
   }
+}
+
+function hasDefaultName(row: EnvironmentRow): boolean {
+  return row.name === `workspace-${row.id.slice(0, 8)}`;
 }
 
 function deriveNameFromRepo(repoUrl: string): string {
