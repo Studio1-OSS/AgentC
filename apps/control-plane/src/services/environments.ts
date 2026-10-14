@@ -4,6 +4,7 @@ import {
   createDatabase,
   migrateDatabase,
   environments,
+  githubConnections,
   sessions,
   projects,
   users,
@@ -21,12 +22,14 @@ import {
 } from "@cloud-agent/protocol";
 import {
   createSandboxClientFromEnv,
+  shellQuote,
   type SandboxClient,
 } from "@cloud-agent/sandbox-client";
 import { ProjectRegistries, createRuntimeApp, createRemoteTools, loadRemoteAgentsFiles, importSandboxSessions } from "@cloud-agent/agent-runtime";
 import type { AppConfig } from "../config.js";
 import { mintUiToken, verifyUiToken } from "../ui-tokens.js";
 import { titleFromPrompt } from "./titles.js";
+import { GitHubApp, GitHubError, TokenCipher, parseGitHubRepo, type UserTokens } from "./github.js";
 import { dirname, join } from "node:path";
 
 function nowIso(): string {
@@ -46,6 +49,7 @@ function toEnvironmentDto(row: EnvironmentRow) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lastActiveAt: row.lastActiveAt,
+    githubRepo: row.githubRepo ?? null,
   };
 }
 
@@ -54,10 +58,15 @@ export class EnvironmentService {
   private _sandboxes: SandboxClient | null = null;
   private readonly runtimes = new Map<string, Promise<{ projects: ProjectRegistries; app: ReturnType<typeof createRuntimeApp> }>>();
 
+  readonly github: GitHubApp | undefined;
+  private readonly tokenCipher: TokenCipher;
+
   constructor(private readonly config: AppConfig) {
     const { db, sqlite } = createDatabase(config.databaseUrl);
     migrateDatabase(sqlite);
     this.db = db;
+    this.github = config.github ? new GitHubApp(config.github) : undefined;
+    this.tokenCipher = new TokenCipher(config.browserSessionSecret);
   }
 
   get sandboxes(): SandboxClient {
@@ -107,7 +116,8 @@ export class EnvironmentService {
     return toEnvironmentDto(row);
   }
 
-  async create(userId: string, rawBody: unknown) {
+  /** `githubRepo` is "owner/repo" after the caller verified the user can reach it through GitHub. */
+  async create(userId: string, rawBody: unknown, githubRepo?: string) {
     const body = CreateEnvironmentRequestSchema.parse(rawBody);
     if (!body.repoUrl && !body.initEmpty) {
       throw new Error("Provide repoUrl or set initEmpty=true");
@@ -137,6 +147,7 @@ export class EnvironmentService {
         createdAt,
         updatedAt: createdAt,
         lastActiveAt: createdAt,
+        githubRepo: githubRepo ?? null,
       })
       .run();
 
@@ -178,6 +189,7 @@ export class EnvironmentService {
       await this.sandboxes.cloneRepository(sandbox, {
         repoUrl: row.repoUrl,
         branch: row.repoBranch ?? undefined,
+        ...(await this.cloneCredentials(row)),
       });
     } else {
       await this.sandboxes.initEmptyWorkspace(sandbox);
@@ -744,12 +756,191 @@ export class EnvironmentService {
     return toEnvironmentDto({ ...current, name, updatedAt });
   }
 
+  // ---------------------------------------------------------------------------
+  // GitHub connection
+  // ---------------------------------------------------------------------------
+
+  githubStatus(userId: string) {
+    if (!this.github) return { configured: false as const, connected: false as const };
+    const row = this.db.select().from(githubConnections).where(eq(githubConnections.userId, userId)).get();
+    return {
+      configured: true as const,
+      installUrl: this.github.installUrl,
+      connected: !!row,
+      ...(row ? { login: row.login, name: row.name, avatarUrl: row.avatarUrl } : {}),
+    };
+  }
+
+  /** Links the GitHub account behind `tokens` to this browser user. */
+  async connectGitHub(userId: string, tokens: UserTokens) {
+    const github = this.requireGitHub();
+    const user = await github.getUser(tokens.accessToken);
+    await this.ensureUser(userId);
+    const now = nowIso();
+    const values = {
+      githubUserId: user.id,
+      login: user.login,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      accessToken: this.tokenCipher.encrypt(tokens.accessToken),
+      accessTokenExpiresAt: tokens.expiresAt,
+      refreshToken: tokens.refreshToken ? this.tokenCipher.encrypt(tokens.refreshToken) : null,
+      updatedAt: now,
+    };
+    this.db
+      .insert(githubConnections)
+      .values({ userId, createdAt: now, ...values })
+      .onConflictDoUpdate({ target: githubConnections.userId, set: values })
+      .run();
+    return user;
+  }
+
+  async disconnectGitHub(userId: string) {
+    const row = this.githubConnection(userId);
+    if (!row) return { ok: true };
+    if (this.github) {
+      try {
+        await this.github.revoke(this.tokenCipher.decrypt(row.accessToken));
+      } catch (err) {
+        console.warn("GitHub grant revoke failed", err);
+      }
+    }
+    this.db.delete(githubConnections).where(eq(githubConnections.userId, userId)).run();
+    return { ok: true };
+  }
+
+  async listGitHubRepos(userId: string) {
+    const token = await this.githubUserToken(userId);
+    return this.requireGitHub().listRepos(token);
+  }
+
+  /**
+   * Confirms the signed-in user can reach `repoUrl` through the app and returns
+   * "owner/repo", or null when it is not a GitHub repository or GitHub is not connected.
+   */
+  async verifyGitHubRepo(userId: string, repoUrl: string): Promise<string | null> {
+    const parsed = parseGitHubRepo(repoUrl);
+    if (!parsed || !this.github || !this.githubConnection(userId)) return null;
+    const token = await this.githubUserToken(userId);
+    try {
+      return (await this.github.getRepo(token, parsed.owner, parsed.repo)).fullName;
+    } catch (err) {
+      if (err instanceof GitHubError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  /** Commits the agent's work to a new branch, pushes it, and opens a pull request as the user. */
+  async createPullRequest(userId: string, environmentId: string, rawBody: unknown) {
+    const github = this.requireGitHub();
+    const env = this.requireOwned(userId, environmentId);
+    if (!env.githubRepo) throw new Error("Open this repository through your GitHub connection to create pull requests");
+    if (env.status !== "ready" || !env.sandboxId) throw new Error("Wait until the sandbox is ready");
+    const [owner, repo] = env.githubRepo.split("/") as [string, string];
+    const body = (rawBody ?? {}) as { title?: unknown; body?: unknown; draft?: unknown };
+    const title = typeof body.title === "string" && body.title.trim() ? body.title.trim().slice(0, 240) : env.name;
+    const description = typeof body.body === "string" && body.body.trim() ? body.body.trim() : "Opened from Cloud Agent.";
+
+    const userToken = await this.githubUserToken(userId);
+    const connection = this.githubConnection(userId)!;
+    const repoInfo = await github.getRepo(userToken, owner, repo);
+    if (!repoInfo.canPush) throw new Error(`Your GitHub account can't push to ${env.githubRepo}`);
+    const base = env.repoBranch ?? repoInfo.defaultBranch;
+
+    const sandbox = await this.sandboxes.get(env.sandboxId);
+    const path = this.config.workspacePath;
+    const run = async (command: string) => {
+      const result = await sandbox.process.executeCommand(command, path, undefined, 120);
+      return { ok: result.exitCode === 0, out: result.result.trim() };
+    };
+
+    // Keep pushing to the agent branch this workspace already opened; otherwise start one.
+    let branch = (await run("git rev-parse --abbrev-ref HEAD")).out;
+    if (!branch.startsWith("cloud-agent/")) {
+      branch = `cloud-agent/${slugify(title)}-${randomUUID().slice(0, 6)}`;
+      const created = await run(`git checkout -b ${shellQuote(branch)}`);
+      if (!created.ok) throw new Error(`Could not create branch: ${created.out}`);
+    }
+
+    const dirty = (await run("git status --porcelain")).out.length > 0;
+    if (dirty) {
+      await run("git add -A");
+      await sandbox.git.commit(path, title, connection.name || connection.login,
+        `${connection.githubUserId}+${connection.login}@users.noreply.github.com`);
+    }
+    const ahead = await run(`git rev-list --count ${shellQuote(`origin/${base}`)}..HEAD`);
+    if (!dirty && ahead.ok && ahead.out === "0") throw new Error("The agent hasn't changed any files yet");
+
+    const pushToken = await github.repoToken(owner, repo);
+    await sandbox.git.push(path, "x-access-token", pushToken, branch, "origin", true);
+
+    try {
+      const pr = await github.createPullRequest(userToken, { owner, repo, head: branch, base, title, body: description, draft: body.draft === true });
+      return { ...pr, branch, base, created: true };
+    } catch (err) {
+      // A later push to the same branch already updated its open pull request.
+      if (err instanceof GitHubError && err.status === 422 && /already exists/i.test(err.message)) {
+        const url = `https://github.com/${owner}/${repo}/pulls?q=${encodeURIComponent(`is:open head:${branch}`)}`;
+        return { url, number: 0, branch, base, created: false };
+      }
+      throw err;
+    }
+  }
+
+  /** Clone credentials only for repositories verified through the user's GitHub connection. */
+  private async cloneCredentials(row: EnvironmentRow): Promise<{ username?: string; password?: string }> {
+    if (!row.githubRepo || !this.github) return {};
+    const [owner, repo] = row.githubRepo.split("/") as [string, string];
+    return { username: "x-access-token", password: await this.github.repoToken(owner, repo) };
+  }
+
+  private githubConnection(userId: string) {
+    return this.db.select().from(githubConnections).where(eq(githubConnections.userId, userId)).get();
+  }
+
+  /** The user's GitHub token, refreshed when it is about to expire. */
+  private async githubUserToken(userId: string): Promise<string> {
+    const github = this.requireGitHub();
+    const row = this.githubConnection(userId);
+    if (!row) throw new Error("Connect your GitHub account first");
+    const expiresAt = row.accessTokenExpiresAt ? Date.parse(row.accessTokenExpiresAt) : Infinity;
+    if (expiresAt - Date.now() > 120_000) return this.tokenCipher.decrypt(row.accessToken);
+    if (!row.refreshToken) throw new Error("Your GitHub session expired. Connect GitHub again.");
+    let tokens: UserTokens;
+    try {
+      tokens = await github.refresh(this.tokenCipher.decrypt(row.refreshToken));
+    } catch {
+      this.db.delete(githubConnections).where(eq(githubConnections.userId, userId)).run();
+      throw new Error("Your GitHub session expired. Connect GitHub again.");
+    }
+    this.db
+      .update(githubConnections)
+      .set({
+        accessToken: this.tokenCipher.encrypt(tokens.accessToken),
+        accessTokenExpiresAt: tokens.expiresAt,
+        refreshToken: tokens.refreshToken ? this.tokenCipher.encrypt(tokens.refreshToken) : row.refreshToken,
+        updatedAt: nowIso(),
+      })
+      .where(eq(githubConnections.userId, userId))
+      .run();
+    return tokens.accessToken;
+  }
+
+  private requireGitHub(): GitHubApp {
+    if (!this.github) throw new Error("GitHub sign-in isn't set up on this server");
+    return this.github;
+  }
+
   private requireOwned(userId: string, id: string): EnvironmentRow {
     const row = this.requireRow(id);
     if (row.userId !== userId) throw new Error("forbidden");
     if (row.status === "deleted") throw new Error("Environment deleted");
     return row;
   }
+}
+
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "changes";
 }
 
 function hasDefaultName(row: EnvironmentRow): boolean {

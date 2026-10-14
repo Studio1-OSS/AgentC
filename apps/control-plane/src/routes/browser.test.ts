@@ -8,6 +8,7 @@ describe("browser workspace ownership", () => {
     const service = {
       list: vi.fn(async (userId: string) => [{ id: userId }]),
       create: vi.fn(async (userId: string) => ({ userId })),
+      verifyGitHubRepo: vi.fn(async () => null),
       get: vi.fn(async (userId: string, id: string) =>
         userId === id || (userId === "owner" && id === "workspace") ? { id } : null,
       ),

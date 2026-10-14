@@ -29,6 +29,9 @@ export type CloneRepoOptions = {
   repoUrl: string;
   branch?: string;
   path?: string;
+  /** HTTPS credentials for a private repository; used for this clone only. */
+  username?: string;
+  password?: string;
 };
 
 export type SignedPreview = {
@@ -141,8 +144,8 @@ export class SandboxClient {
       target,
       options.branch,
       undefined,
-      undefined,
-      undefined,
+      options.username,
+      options.password,
       false,
       1,
     );

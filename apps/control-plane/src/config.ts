@@ -1,4 +1,5 @@
 import { config as loadEnv } from "dotenv";
+import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -22,7 +23,36 @@ export type AppConfig = {
   piAgentDir: string;
   llm: LlmProviderConfig;
   daytonaApiKey?: string;
+  /** Set only when every GitHub App setting is present. */
+  github?: GitHubAppConfig;
 };
+
+export type GitHubAppConfig = {
+  appId: string;
+  slug: string;
+  clientId: string;
+  clientSecret: string;
+  privateKey: string;
+};
+
+/** GitHub App settings from .env; the private key comes from a file path or inline PEM. */
+export function loadGitHubConfig(env: NodeJS.ProcessEnv): GitHubAppConfig | undefined {
+  const appId = env.GITHUB_APP_ID?.trim();
+  const slug = env.GITHUB_APP_SLUG?.trim();
+  const clientId = env.GITHUB_CLIENT_ID?.trim();
+  const clientSecret = env.GITHUB_CLIENT_SECRET?.trim();
+  const keyPath = env.GITHUB_APP_PRIVATE_KEY_PATH?.trim();
+  let privateKey = env.GITHUB_APP_PRIVATE_KEY?.trim().replace(/\\n/g, "\n");
+  if (!privateKey && keyPath) {
+    try {
+      privateKey = readFileSync(keyPath, "utf8");
+    } catch {
+      console.warn(`GitHub App private key not readable at ${keyPath}; GitHub sign-in is disabled.`);
+    }
+  }
+  if (!appId || !slug || !clientId || !clientSecret || !privateKey) return undefined;
+  return { appId, slug, clientId, clientSecret, privateKey };
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const apiKey = env.CONTROL_PLANE_API_KEY ?? "dev-api-key-change-me";
@@ -56,5 +86,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     piAgentDir: env.PI_AGENT_DIR ?? resolve(dataDir, "pi"),
     llm,
     daytonaApiKey: env.DAYTONA_API_KEY,
+    github: loadGitHubConfig(env),
   };
 }
