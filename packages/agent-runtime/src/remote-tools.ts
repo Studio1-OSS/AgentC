@@ -14,6 +14,15 @@ import { createPreviewTool } from "./preview.js";
 
 type Sandbox = Awaited<ReturnType<SandboxClient["get"]>>;
 
+/**
+ * Pi resolves tool paths with the host's path rules, so on a Windows app server
+ * "/home/daytona/x" arrives as "D:\home\daytona\x". The sandbox is Linux.
+ */
+export function toSandboxPath(path: string): string {
+  if (!/^[A-Za-z]:[\\/]/.test(path) && !path.includes("\\")) return path;
+  return posix.normalize(path.replace(/^[A-Za-z]:/, "").replace(/\\/g, "/"));
+}
+
 /** Never forward Pi's shell environment: it contains the server's credentials. */
 export function remoteBashOperations(sandbox: Sandbox): BashOperations {
   return {
@@ -25,7 +34,7 @@ export function remoteBashOperations(sandbox: Sandbox): BashOperations {
       await sandbox.process.createSession(sessionId);
       try {
         const result = await sandbox.process.executeSessionCommand(sessionId, {
-          command: `cd ${shellQuote(cwd)} && timeout --signal=TERM --kill-after=5s ${timeout}s bash -c ${shellQuote(command)}`,
+          command: `cd ${shellQuote(toSandboxPath(cwd))} && timeout --signal=TERM --kill-after=5s ${timeout}s bash -c ${shellQuote(command)}`,
           runAsync: true,
         });
         if (!result.cmdId) throw new Error("Daytona did not return a command id");
@@ -56,11 +65,11 @@ export function remoteBashOperations(sandbox: Sandbox): BashOperations {
 }
 
 export function createRemoteTools(sandbox: Sandbox, cwd: string, port: number): ToolDefinition[] {
-  const readFile = (path: string) => sandbox.fs.downloadFile(path);
-  const access = async (path: string) => { await sandbox.fs.getFileDetails(path); };
-  const writeFile = (path: string, content: string) => sandbox.fs.uploadFile(Buffer.from(content), path);
+  const readFile = (path: string) => sandbox.fs.downloadFile(toSandboxPath(path));
+  const access = async (path: string) => { await sandbox.fs.getFileDetails(toSandboxPath(path)); };
+  const writeFile = (path: string, content: string) => sandbox.fs.uploadFile(Buffer.from(content), toSandboxPath(path));
   const mkdir = async (path: string) => {
-    const result = await sandbox.process.executeCommand(`mkdir -p ${shellQuote(path)}`, undefined, undefined, 30);
+    const result = await sandbox.process.executeCommand(`mkdir -p ${shellQuote(toSandboxPath(path))}`, undefined, undefined, 30);
     if (result.exitCode !== 0) throw new Error(`Unable to create directory: ${result.result}`);
   };
   return [

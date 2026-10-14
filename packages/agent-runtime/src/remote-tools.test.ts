@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createRemoteTools, remoteBashOperations } from "./remote-tools.js";
+import { createRemoteTools, remoteBashOperations, toSandboxPath } from "./remote-tools.js";
 
 afterEach(() => vi.unstubAllEnvs());
 function setup(exitCode?: number) {
@@ -36,7 +36,7 @@ describe("Daytona tool boundary", () => {
     await run("edit", { path: "nested/file.txt", edits: [{ oldText: "before", newText: "after" }] });
     const result = await run("read", { path: "nested/file.txt" });
     expect(result.content).toContainEqual({ type: "text", text: "after" });
-    expect(files.get(join(cwd, "nested/file.txt"))?.toString()).toBe("after");
+    expect(files.get(toSandboxPath(join(cwd, "nested/file.txt")))?.toString()).toBe("after");
     expect(sandbox.process.executeCommand).toHaveBeenCalledWith(expect.stringContaining("mkdir -p"), undefined, undefined, 30);
     expect(existsSync(cwd)).toBe(false);
   });
@@ -80,5 +80,16 @@ describe("Daytona tool boundary", () => {
     const result = await preview.execute("call", {}, undefined, undefined, {} as never);
     expect(sandbox.process.executeCommand).toHaveBeenCalledWith(expect.stringContaining("3001-signed.proxy.daytona.work"), undefined, undefined, 10);
     expect(result.details).toMatchObject({ port: 3001 });
+  });
+});
+
+describe("toSandboxPath", () => {
+  it("turns paths resolved on a Windows host back into sandbox paths", () => {
+    expect(toSandboxPath("D:\\home\\daytona\\workspace\\project\\add.py")).toBe("/home/daytona/workspace/project/add.py");
+    expect(toSandboxPath("C:/home/daytona/workspace")).toBe("/home/daytona/workspace");
+  });
+
+  it("leaves Linux paths alone", () => {
+    expect(toSandboxPath("/home/daytona/workspace/project")).toBe("/home/daytona/workspace/project");
   });
 });
