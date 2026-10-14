@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronDown, GitBranch, GitCommitHorizontal, X, Monitor, FileCode2, Check } from "lucide-react";
+import { ChevronDown, GitBranch, GitCommitHorizontal, X, Monitor, FileCode2, Check, ExternalLink, Loader2 } from "lucide-react";
 import type { FileDiff } from "@/components/ToolCalls";
 
 /* Right-hand workspace panel shown beside the chat when a GitHub repository is
@@ -23,7 +23,17 @@ type RepoPanelProps = {
   tab: RepoPanelTab;
   onTabChange: (tab: RepoPanelTab) => void;
   onClose: () => void;
+  /** Pushes the agent's changes and opens (or updates) a pull request on GitHub. */
+  onCreatePr?: (draft: boolean) => Promise<{ url: string }>;
+  /** Shown on the disabled Create PR button when pull requests aren't available. */
+  prUnavailableReason?: string;
 };
+
+type PrState =
+  | { kind: "idle" }
+  | { kind: "creating" }
+  | { kind: "done"; url: string; draft: boolean }
+  | { kind: "error"; message: string };
 
 const TABS: Array<{ id: RepoPanelTab; label: string }> = [
   { id: "environment", label: "Environment" },
@@ -93,9 +103,11 @@ export function RepoPanel({
   tab,
   onTabChange,
   onClose,
+  onCreatePr,
+  prUnavailableReason = "Open this repository from your GitHub connection to create pull requests",
 }: RepoPanelProps) {
   const [subTab, setSubTab] = useState<"diff" | "review" | "commits">("diff");
-  const [prState, setPrState] = useState<"none" | "draft" | "open">("none");
+  const [pr, setPr] = useState<PrState>({ kind: "idle" });
   const [prMenuOpen, setPrMenuOpen] = useState(false);
   const diffs = mergeDiffs(commits);
   const added = diffs.reduce((sum, d) => sum + d.add, 0);
@@ -103,8 +115,21 @@ export function RepoPanel({
 
   // A new branch means a new session: reset the PR state.
   useEffect(() => {
-    setPrState("none");
+    setPr({ kind: "idle" });
   }, [branch]);
+
+  async function openPr(draft: boolean) {
+    if (!onCreatePr) return;
+    setPrMenuOpen(false);
+    const previous = pr;
+    setPr({ kind: "creating" });
+    try {
+      const result = await onCreatePr(draft);
+      setPr({ kind: "done", url: result.url, draft: previous.kind === "done" ? previous.draft : draft });
+    } catch (err) {
+      setPr({ kind: "error", message: (err as Error).message });
+    }
+  }
 
   return (
     <aside className="rp" aria-label="Workspace panel">
@@ -144,18 +169,33 @@ export function RepoPanel({
               </div>
               <div className="rp-pr-wrap">
                 <div className="rp-pr-split">
-                  <button
-                    type="button"
-                    className="rp-pr-btn"
-                    disabled={diffs.length === 0}
-                    onClick={() => setPrState((s) => (s === "none" ? "open" : s))}
-                  >
-                    {prState === "none" ? "Create PR" : prState === "draft" ? "Draft PR opened" : "PR opened"}
-                  </button>
+                  {pr.kind === "done" ? (
+                    <a className="rp-pr-btn" href={pr.url} target="_blank" rel="noopener noreferrer">
+                      {pr.draft ? "View draft PR" : "View PR"}
+                      <ExternalLink size={12} />
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      className="rp-pr-btn"
+                      disabled={!onCreatePr || pr.kind === "creating" || diffs.length === 0}
+                      title={onCreatePr ? undefined : prUnavailableReason}
+                      onClick={() => void openPr(false)}
+                    >
+                      {pr.kind === "creating" ? (
+                        <>
+                          <Loader2 size={12} className="rp-spin" />
+                          Opening…
+                        </>
+                      ) : (
+                        "Create PR"
+                      )}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="rp-pr-caret"
-                    disabled={diffs.length === 0 || prState !== "none"}
+                    disabled={!onCreatePr || pr.kind === "creating" || diffs.length === 0}
                     aria-label="More pull request options"
                     onClick={() => setPrMenuOpen((v) => !v)}
                   >
@@ -164,28 +204,25 @@ export function RepoPanel({
                 </div>
                 {prMenuOpen && (
                   <div className="rp-pr-menu" onMouseLeave={() => setPrMenuOpen(false)}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPrState("open");
-                        setPrMenuOpen(false);
-                      }}
-                    >
-                      Create pull request
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPrState("draft");
-                        setPrMenuOpen(false);
-                      }}
-                    >
-                      Create draft pull request
-                    </button>
+                    {pr.kind === "done" ? (
+                      <button type="button" onClick={() => void openPr(pr.draft)}>
+                        Push latest changes
+                      </button>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => void openPr(false)}>
+                          Create pull request
+                        </button>
+                        <button type="button" onClick={() => void openPr(true)}>
+                          Create draft pull request
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
             </div>}
+            {hasRepo && pr.kind === "error" && <p className="rp-pr-error" role="alert">{pr.message}</p>}
 
             <h3 className="rp-title">{title}</h3>
 

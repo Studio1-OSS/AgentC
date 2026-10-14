@@ -77,6 +77,8 @@ import { TokenFactoryLogo } from "@/components/TokenFactoryLogo";
 import { ThinkingTrace } from "@/components/ThinkingTrace";
 import { ToolCalls, type FileDiff, type ToolStep } from "@/components/ToolCalls";
 import { RepoPanel, type RepoCommit, type RepoPanelTab, type TerminalEntry } from "@/components/RepoPanel";
+import { GitHubConnectModal } from "@/components/GitHubConnectModal";
+import { createPullRequest, fetchGitHubStatus, type GitHubStatus } from "@/lib/github";
 import { Markdown } from "@/components/Markdown";
 import { NotificationsPanel, type AppNotification } from "@/components/NotificationsPanel";
 import { buildConversation, type TurnTiming } from "@/lib/conversation";
@@ -278,6 +280,23 @@ export function App() {
   // "Open PRs" nudge: keeps coming back until a GitHub repository is connected.
   // "Later" only snoozes it for a few minutes; nothing is persisted.
   const [ghPromptSnoozed, setGhPromptSnoozed] = useState(false);
+  const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null);
+  const refreshGitHubStatus = useCallback(() => {
+    fetchGitHubStatus().then(setGithubStatus).catch(() => setGithubStatus(null));
+  }, []);
+  // Coming back from GitHub's sign-in or install pages: report the outcome once, then tidy the URL.
+  useEffect(() => {
+    refreshGitHubStatus();
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("github");
+    if (!outcome) return;
+    if (outcome === "connected" || outcome === "installed" || outcome === "updated") setGhConnectModal(true);
+    else if (outcome === "unavailable") setError("GitHub sign-in isn't set up on this server yet.");
+    else setError("GitHub sign-in didn't finish. Please try connecting again.");
+    params.delete("github");
+    const query = params.toString();
+    window.history.replaceState({}, "", `/ui/${query ? `?${query}` : ""}`);
+  }, [refreshGitHubStatus]);
   useEffect(() => {
     if (!ghPromptSnoozed) return;
     const t = setTimeout(() => setGhPromptSnoozed(false), 5 * 60 * 1000);
@@ -1902,110 +1921,15 @@ export function App() {
 
       {/* Dedicated Connect GitHub Repository Modal */}
       {ghConnectModal && (
-        <div className="modal-backdrop" onClick={() => setGhConnectModal(false)}>
-          <section
-            className="workspace-modal devin-gh-connect-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="gh-connect-heading"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="modal-close icon-button"
-              aria-label="Close"
-              onClick={() => setGhConnectModal(false)}
-            >
-              <X size={18} />
-            </button>
-            <div className="devin-gh-modal-header">
-              <div className="devin-gh-modal-icon-badge">
-                <Github size={24} />
-              </div>
-              <h2 id="gh-connect-heading" className="devin-gh-modal-title">
-                Connect GitHub Repository
-              </h2>
-              <p className="devin-gh-modal-subtitle">
-                Connect your codebase to let Cloud Agent review code, fix bugs, and open pull requests autonomously.
-              </p>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const targetRepo = repo.trim();
-                if (!targetRepo) return;
-                setGhConnectModal(false);
-                void startWorkspace({
-                  repoUrl: normalizeRepoUrl(targetRepo),
-                  ...(branch.trim() ? { repoBranch: branch.trim() } : {}),
-                });
-              }}
-              className="devin-gh-modal-form"
-            >
-              <label className="devin-gh-modal-label">Repository Name or URL</label>
-              <div className="devin-gh-modal-input-wrap">
-                <Github size={16} className="devin-gh-modal-input-icon" />
-                <input
-                  type="text"
-                  autoFocus
-                  required
-                  value={repo}
-                  onChange={(e) => setRepo(e.target.value)}
-                  placeholder="e.g. Studio1-OSS/cloud-agent or facebook/react"
-                  className="devin-gh-modal-input"
-                />
-              </div>
-
-              <div className="devin-gh-quick-chips">
-                <span className="devin-gh-quick-chips-label">Popular repositories:</span>
-                <div className="devin-gh-chips-row">
-                  {[
-                    "Studio1-OSS/cloud-agent",
-                    "facebook/react",
-                    "vercel/next.js",
-                    "tailwindlabs/tailwindcss",
-                  ].map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      className={`devin-gh-chip-btn ${repo === chip ? "selected" : ""}`}
-                      onClick={() => setRepo(chip)}
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="devin-gh-branch-row">
-                <GitBranch size={15} className="text-zinc-400" />
-                <input
-                  type="text"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  placeholder="Default branch (main)"
-                  className="devin-gh-branch-input"
-                />
-              </div>
-
-              <div className="devin-gh-modal-footer">
-                <button
-                  type="button"
-                  className="devin-gh-modal-cancel"
-                  onClick={() => setGhConnectModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="obsidian-glass-button devin-gh-modal-submit"
-                >
-                  Connect & Open Repository →
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
+        <GitHubConnectModal
+          status={githubStatus}
+          onClose={() => setGhConnectModal(false)}
+          onStatusChange={refreshGitHubStatus}
+          onOpenRepo={(repoUrl, repoBranch) => {
+            setGhConnectModal(false);
+            void startWorkspace({ repoUrl, ...(repoBranch ? { repoBranch } : {}) });
+          }}
+        />
       )}
 
       {/* 4. Floating GitHub Onboarding Card matching user screenshot */}
@@ -2493,6 +2417,23 @@ export function App() {
     // Live sessions without a repository still get the panel for the sandbox's changes and commands.
     const panelLabel = connectedRepo ?? (token ? selected?.name ?? "Workspace" : null);
     const showPanel = !!panelLabel && repoPanelOpen;
+    // Pull requests need a repository opened through the user's GitHub connection.
+    const panelWorkspaceId = live.bootstrap?.environmentId ?? selected?.id;
+    const githubRepo = workspaces.find((w) => w.id === panelWorkspaceId)?.githubRepo;
+    const onCreatePr =
+      panelWorkspaceId && githubRepo
+        ? (draft: boolean) =>
+            createPullRequest(panelWorkspaceId, {
+              title: sessionTitle === "New session" ? "Changes from Cloud Agent" : sessionTitle,
+              body: firstPrompt ? `Opened from Cloud Agent.\n\n**Task:** ${firstPrompt}` : "Opened from Cloud Agent.",
+              draft,
+            })
+        : undefined;
+    const prUnavailableReason = !githubStatus?.configured
+      ? "GitHub sign-in isn't set up on this server"
+      : !githubStatus.connected
+        ? "Connect GitHub to create pull requests"
+        : "Open this repository from your GitHub repository list to create pull requests";
 
     return (
       <div className={`devin-conversation-layout ${showPanel ? "has-repo-panel" : ""}`}>
@@ -2706,6 +2647,8 @@ export function App() {
             tab={repoPanelTab}
             onTabChange={setRepoPanelTab}
             onClose={() => setRepoPanelOpen(false)}
+            onCreatePr={onCreatePr}
+            prUnavailableReason={prUnavailableReason}
           />
         )}
       </div>
