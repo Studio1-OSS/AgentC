@@ -21,6 +21,24 @@ export const environments = sqliteTable("environments", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   lastActiveAt: text("last_active_at"),
+  /** "owner/repo" when the repository was opened through the user's GitHub connection. */
+  githubRepo: text("github_repo"),
+});
+
+/** A browser user's linked GitHub account. Tokens are encrypted at rest. */
+export const githubConnections = sqliteTable("github_connections", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  githubUserId: integer("github_user_id").notNull(),
+  login: text("login").notNull(),
+  name: text("name"),
+  avatarUrl: text("avatar_url"),
+  accessToken: text("access_token").notNull(),
+  accessTokenExpiresAt: text("access_token_expires_at"),
+  refreshToken: text("refresh_token"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
 });
 
 export const sessions = sqliteTable("sessions", {
@@ -52,3 +70,4 @@ export type UserRow = typeof users.$inferSelect;
 export type EnvironmentRow = typeof environments.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
+export type GithubConnectionRow = typeof githubConnections.$inferSelect;

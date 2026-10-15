@@ -6,6 +6,8 @@ export type Workspace = {
   status: "creating" | "ready" | "sleeping" | "starting" | "stopping" | "error";
   errorMessage?: string | null;
   createdAt: string;
+  /** "owner/repo" when opened through the user's GitHub connection; enables pull requests. */
+  githubRepo?: string | null;
 };
 export type Project = {
   id: string;

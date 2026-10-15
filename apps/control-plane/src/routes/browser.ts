@@ -6,6 +6,7 @@ import type { AuthVariables } from "../middleware/auth.js";
 import type { EnvironmentService } from "../services/environments.js";
 import { createProjectRoutes, requirePublicGitHubRepo } from "./projects.js";
 import { verifyUiToken, type UiTokenPayload } from "../ui-tokens.js";
+import { createGitHubRoutes } from "./github.js";
 
 /** Browser ownership comes from its guest cookie or a grant for one linked workspace. */
 export function createBrowserRoutes(
@@ -18,7 +19,35 @@ export function createBrowserRoutes(
     c.header("Cache-Control", "no-store");
     if (!["GET", "HEAD"].includes(c.req.method)) {
       const origin = c.req.header("origin");
-      if (!origin || new URL(origin).host !== c.req.header("host")) {
+      if (!origin) {
+        return c.json({ error: "Request must come from this website" }, 403);
+      }
+      let originHost: string;
+      try {
+        originHost = new URL(origin).host;
+      } catch {
+        return c.json({ error: "Request must come from this website" }, 403);
+      }
+      const host = c.req.header("host") ?? "";
+      const forwardedHost = c.req.header("x-forwarded-host")?.split(",")[0]?.trim() ?? "";
+
+      const isLoopback = (h: string) => {
+        const hostname = h.split(":")[0]?.toLowerCase();
+        return (
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "::1" ||
+          hostname === "[::1]"
+        );
+      };
+
+      const isMatchingHost =
+        originHost === host || (Boolean(forwardedHost) && originHost === forwardedHost);
+      const isDevLoopback =
+        isLoopback(originHost) &&
+        (isLoopback(host) || (Boolean(forwardedHost) && isLoopback(forwardedHost)));
+
+      if (!isMatchingHost && !isDevLoopback) {
         return c.json({ error: "Request must come from this website" }, 403);
       }
     }
@@ -74,6 +103,7 @@ export function createBrowserRoutes(
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 401);
     }
   });
+  app.route("/github", createGitHubRoutes(service, secret));
   app.route("/environments", createProjectRoutes(service, true));
   app.get("/environments", async (c) => {
     const grant = c.get("workspaceGrant");
@@ -96,7 +126,10 @@ export function createBrowserRoutes(
         },
         429,
       );
-    return c.json(await service.create(c.get("userId"), body), 202);
+    // Repositories the user reaches through their GitHub connection (including private ones)
+    // are cloned with an app token; anything else is cloned anonymously.
+    const githubRepo = body.repoUrl ? await service.verifyGitHubRepo(c.get("userId"), body.repoUrl) : null;
+    return c.json(await service.create(c.get("userId"), body, githubRepo ?? undefined), 202);
   });
   app.get("/environments/:id", async (c) => {
     const env = await service.get(c.get("userId"), c.req.param("id"));
@@ -106,6 +139,21 @@ export function createBrowserRoutes(
     return c.json(
       await service.resumeUiChat(c.get("userId"), c.req.param("id")),
     );
+  });
+  app.post("/environments/:id/name-from-prompt", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { prompt?: unknown } | null;
+    const prompt = typeof body?.prompt === "string" ? body.prompt : "";
+    if (!prompt.trim()) return c.json({ error: "prompt is required" }, 400);
+    return c.json(
+      await service.nameFromPrompt(c.get("userId"), c.req.param("id"), prompt),
+    );
+  });
+  app.post("/environments/:id/pull-request", async (c) => {
+    // Only the owner's own browser, never a shared workspace link, may push as their GitHub account.
+    const guest = await getSignedCookie(c, secret, "cloud_agent_guest");
+    if (!guest || guest !== c.get("userId")) return c.json({ error: "Only the workspace owner can open pull requests" }, 403);
+    const body = await c.req.json().catch(() => ({}));
+    return c.json(await service.createPullRequest(c.get("userId"), c.req.param("id"), body));
   });
   app.post("/environments/:id/start", async (c) =>
     c.json(await service.start(c.get("userId"), c.req.param("id"))),

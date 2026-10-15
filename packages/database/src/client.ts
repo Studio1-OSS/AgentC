@@ -70,6 +70,19 @@ export function migrateDatabase(sqlite: Database.Database): void {
       UNIQUE(environment_id, preview_port)
     );
 
+    CREATE TABLE IF NOT EXISTS github_connections (
+      user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
+      github_user_id INTEGER NOT NULL,
+      login TEXT NOT NULL,
+      name TEXT,
+      avatar_url TEXT,
+      access_token TEXT NOT NULL,
+      access_token_expires_at TEXT,
+      refresh_token TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_environments_user_id ON environments(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_environment_id ON sessions(environment_id);
     CREATE INDEX IF NOT EXISTS idx_projects_environment_id ON projects(environment_id);
@@ -77,5 +90,9 @@ export function migrateDatabase(sqlite: Database.Database): void {
   const columns = sqlite.pragma("table_info(sessions)") as { name: string }[];
   if (!columns.some((column) => column.name === "project_id")) {
     sqlite.exec("ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)");
+  }
+  const environmentColumns = sqlite.pragma("table_info(environments)") as { name: string }[];
+  if (!environmentColumns.some((column) => column.name === "github_repo")) {
+    sqlite.exec("ALTER TABLE environments ADD COLUMN github_repo TEXT");
   }
 }

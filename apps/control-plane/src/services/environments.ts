@@ -4,6 +4,7 @@ import {
   createDatabase,
   migrateDatabase,
   environments,
+  githubConnections,
   sessions,
   projects,
   users,
@@ -17,18 +18,19 @@ import {
   ProjectIdSchema,
   SessionRequestSchema,
   DEFAULT_WEB_PREVIEW_PORT,
-  RUNTIME_VERSION,
-  buildSandboxModelEnv,
   type EnvironmentStatus,
 } from "@cloud-agent/protocol";
 import {
   createSandboxClientFromEnv,
+  shellQuote,
   type SandboxClient,
 } from "@cloud-agent/sandbox-client";
+import { ProjectRegistries, createRuntimeApp, createRemoteTools, loadRemoteAgentsFiles, importSandboxSessions } from "@cloud-agent/agent-runtime";
 import type { AppConfig } from "../config.js";
 import { mintUiToken, verifyUiToken } from "../ui-tokens.js";
-import { resolve, dirname, join } from "node:path";
-import { existsSync } from "node:fs";
+import { titleFromPrompt } from "./titles.js";
+import { GitHubApp, GitHubError, TokenCipher, parseGitHubRepo, type UserTokens } from "./github.js";
+import { dirname, join } from "node:path";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -47,17 +49,24 @@ function toEnvironmentDto(row: EnvironmentRow) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lastActiveAt: row.lastActiveAt,
+    githubRepo: row.githubRepo ?? null,
   };
 }
 
 export class EnvironmentService {
   readonly db: AppDatabase;
   private _sandboxes: SandboxClient | null = null;
+  private readonly runtimes = new Map<string, Promise<{ projects: ProjectRegistries; app: ReturnType<typeof createRuntimeApp> }>>();
+
+  readonly github: GitHubApp | undefined;
+  private readonly tokenCipher: TokenCipher;
 
   constructor(private readonly config: AppConfig) {
     const { db, sqlite } = createDatabase(config.databaseUrl);
     migrateDatabase(sqlite);
     this.db = db;
+    this.github = config.github ? new GitHubApp(config.github) : undefined;
+    this.tokenCipher = new TokenCipher(config.browserSessionSecret);
   }
 
   get sandboxes(): SandboxClient {
@@ -107,7 +116,8 @@ export class EnvironmentService {
     return toEnvironmentDto(row);
   }
 
-  async create(userId: string, rawBody: unknown) {
+  /** `githubRepo` is "owner/repo" after the caller verified the user can reach it through GitHub. */
+  async create(userId: string, rawBody: unknown, githubRepo?: string) {
     const body = CreateEnvironmentRequestSchema.parse(rawBody);
     if (!body.repoUrl && !body.initEmpty) {
       throw new Error("Provide repoUrl or set initEmpty=true");
@@ -137,6 +147,7 @@ export class EnvironmentService {
         createdAt,
         updatedAt: createdAt,
         lastActiveAt: createdAt,
+        githubRepo: githubRepo ?? null,
       })
       .run();
 
@@ -155,17 +166,11 @@ export class EnvironmentService {
 
   private async provision(environmentId: string): Promise<void> {
     const row = this.requireRow(environmentId);
-    const runtimeToken = this.config.runtimeAccessSecret;
-
     const sandbox = await this.sandboxes.create({
       name: `env-${environmentId.slice(0, 8)}`,
       labels: {
         "cloud-agent/environment-id": environmentId,
         "cloud-agent/user-id": row.userId,
-      },
-      envVars: {
-        RUNTIME_ACCESS_TOKEN: runtimeToken,
-        ...buildSandboxModelEnv(process.env),
       },
     });
 
@@ -184,17 +189,13 @@ export class EnvironmentService {
       await this.sandboxes.cloneRepository(sandbox, {
         repoUrl: row.repoUrl,
         branch: row.repoBranch ?? undefined,
+        ...(await this.cloneCredentials(row)),
       });
     } else {
       await this.sandboxes.initEmptyWorkspace(sandbox);
     }
 
-    const bundleDir = resolveRuntimeBundle(this.config.runtimeBundleDir);
-    await this.sandboxes.deployAndStartRuntime(sandbox, {
-      runtimeBundleLocalDir: bundleDir,
-      runtimeAccessToken: runtimeToken,
-      modelEnv: buildSandboxModelEnv(process.env),
-    });
+    await this.sandboxes.configureWebPreview(sandbox);
 
     await this.setStatus(environmentId, "ready");
   }
@@ -206,23 +207,6 @@ export class EnvironmentService {
     await this.setStatus(id, "starting");
     try {
       const sandbox = await this.sandboxes.start(row.sandboxId);
-      try {
-        await this.sandboxes.waitForRuntimeHealthy(sandbox, 15_000);
-        const health = await this.sandboxes.fetchRuntime(sandbox, "/health", {
-          method: "GET",
-          runtimeAccessToken: this.config.runtimeAccessSecret,
-        });
-        if (!health.ok || (await health.json() as { runtimeVersion?: number }).runtimeVersion !== RUNTIME_VERSION) {
-          throw new Error("Sandbox runtime needs an upgrade");
-        }
-      } catch {
-        const bundleDir = resolveRuntimeBundle(this.config.runtimeBundleDir);
-        await this.sandboxes.deployAndStartRuntime(sandbox, {
-          runtimeBundleLocalDir: bundleDir,
-          runtimeAccessToken: this.config.runtimeAccessSecret,
-          modelEnv: buildSandboxModelEnv(process.env),
-        });
-      }
       await this.sandboxes.configureWebPreview(sandbox);
       await this.setStatus(id, "ready");
     } catch (err) {
@@ -243,6 +227,7 @@ export class EnvironmentService {
 
     await this.setStatus(id, "stopping");
     try {
+      await this.disposeRuntime(id);
       await this.sandboxes.stop(row.sandboxId);
       await this.setStatus(id, "sleeping");
     } catch (err) {
@@ -258,6 +243,7 @@ export class EnvironmentService {
 
   async remove(userId: string, id: string) {
     const row = this.requireOwned(userId, id);
+    await this.disposeRuntime(id);
     if (row.sandboxId) {
       try {
         await this.sandboxes.delete(row.sandboxId);
@@ -283,11 +269,7 @@ export class EnvironmentService {
     if (!env.sandboxId) throw new Error("Environment has no sandbox");
     if (env.status !== "ready") throw new Error(`Environment is ${env.status}`);
 
-    const sandbox = await this.sandboxes.get(env.sandboxId);
-    const res = await this.sandboxes.fetchRuntime(sandbox, "/sessions", {
-      method: "GET",
-      runtimeAccessToken: this.config.runtimeAccessSecret,
-    });
+    const res = await this.proxyRuntime(userId, environmentId, "/sessions", { method: "GET" });
     if (!res.ok) {
       throw new Error(
         `Runtime list sessions failed: ${res.status} ${await res.text()}`,
@@ -328,7 +310,7 @@ export class EnvironmentService {
     }
     const existing = this.db.select().from(projects).where(eq(projects.environmentId, environmentId)).all();
     let previewPort = Math.max(DEFAULT_WEB_PREVIEW_PORT, ...existing.map((p) => p.previewPort)) + 1;
-    while ([this.config.runtimePort, 22222, 2280, 33333].includes(previewPort)) previewPort++;
+    while ([22222, 2280, 33333].includes(previewPort)) previewPort++;
     if (previewPort > 65535) throw new Error("No preview ports available");
     const id = randomUUID();
     const project: ProjectRow = {
@@ -385,11 +367,9 @@ export class EnvironmentService {
     const project = this.getProject(userId, environmentId, projectId);
     if (project.status !== "ready") throw new Error(`Project is ${project.status}`);
 
-    const sandbox = await this.sandboxes.get(env.sandboxId);
-    const create = () => this.sandboxes.fetchRuntime(sandbox, projectRuntimePath("/sessions", project), {
+    const create = () => this.proxyRuntime(userId, environmentId, projectRuntimePath("/sessions", project), {
       method: "POST",
       body: JSON.stringify({ title }),
-      runtimeAccessToken: this.config.runtimeAccessSecret,
     });
     let res = await this.openSessionOrRecover(userId, environmentId, "create", create);
     if (!res.ok) {
@@ -430,14 +410,10 @@ export class EnvironmentService {
     if (!env.sandboxId) throw new Error("Environment has no sandbox");
     if (env.status !== "ready") throw new Error(`Environment is ${env.status}`);
 
-    const sandbox = await this.sandboxes.get(env.sandboxId);
-    const preview = await this.sandboxes.getRuntimePreviewUrl(sandbox);
-    const wsBase = preview.url.replace(/^http/, "ws");
-
     return {
-      httpBaseUrl: preview.url,
-      wsBaseUrl: wsBase,
-      note: "Prefer /ui chat + short-lived UI tokens. Do not expose Daytona API keys to the browser.",
+      httpBaseUrl: `/environments/${encodeURIComponent(environmentId)}/runtime`,
+      wsBaseUrl: "/ui/ws",
+      note: "Use /ui chat and its short-lived token. Pi runs on the control-plane server.",
     };
   }
 
@@ -626,34 +602,50 @@ export class EnvironmentService {
     };
   }
 
-  /** Open a WebSocket to the in-sandbox Pi runtime for a session. */
-  async openRuntimeSessionSocket(
-    userId: string,
-    environmentId: string,
-    piSessionId: string,
-    projectId = "default",
-  ) {
+  /** Resolve the server-side Pi registry for a browser WebSocket. */
+  async getRuntimeSessionRegistry(userId: string, environmentId: string, piSessionId: string, projectId = "default") {
     const env = this.requireOwned(userId, environmentId);
-    if (!env.sandboxId) throw new Error("Environment has no sandbox");
     if (env.status !== "ready") throw new Error(`Environment is ${env.status}`);
     const project = this.getProject(userId, environmentId, projectId);
     if (project.status !== "ready") throw new Error(`Project is ${project.status}`);
+    const runtime = await this.getRuntime(env);
+    const registry = runtime.projects.get(projectId, project.previewPort);
+    await registry.openSession(piSessionId);
+    return registry;
+  }
 
-    const connect = async () => {
-      const sandbox = await this.sandboxes.get(env.sandboxId!);
-      return this.sandboxes.connectRuntimeSessionWs(sandbox, {
-        piSessionId,
-        projectId,
-        previewPort: project.previewPort,
-        runtimeAccessToken: this.config.runtimeAccessSecret,
-      });
-    };
-    try {
-      return await connect();
-    } catch {
-      await this.recoverRuntime(userId, environmentId);
-      return await connect();
+  private async getRuntime(env: EnvironmentRow) {
+    if (!env.sandboxId) throw new Error("Environment has no sandbox");
+    let pending = this.runtimes.get(env.id);
+    if (!pending) {
+      pending = (async () => {
+        const sandbox = await this.sandboxes.get(env.sandboxId!);
+        await importSandboxSessions(sandbox, this.config.workspacePath, join(this.config.piAgentDir, env.id));
+        const projects = new ProjectRegistries({
+          cwd: this.config.workspacePath,
+          agentDir: join(this.config.piAgentDir, env.id),
+          llm: this.config.llm,
+          loadAgentsFiles: (cwd) => loadRemoteAgentsFiles(sandbox, cwd),
+        }, (cwd, port) => createRemoteTools(sandbox, cwd, port));
+        return { projects, app: createRuntimeApp(projects, this.config.llm) };
+      })();
+      this.runtimes.set(env.id, pending);
+      void pending.catch(() => { this.runtimes.delete(env.id); });
     }
+    return pending;
+  }
+
+  private async disposeRuntime(environmentId: string) {
+    const pending = this.runtimes.get(environmentId);
+    this.runtimes.delete(environmentId);
+    if (pending) {
+      const runtime = await pending;
+      runtime.projects.disposeAll();
+    }
+  }
+
+  async disposeAll() {
+    for (const id of this.runtimes.keys()) await this.disposeRuntime(id);
   }
 
   async createPreview(userId: string, environmentId: string, rawBody: unknown) {
@@ -679,11 +671,8 @@ export class EnvironmentService {
     if (!env.sandboxId) throw new Error("Environment has no sandbox");
     if (env.status !== "ready") throw new Error(`Environment is ${env.status}`);
 
-    const sandbox = await this.sandboxes.get(env.sandboxId);
-    return this.sandboxes.fetchRuntime(sandbox, path, {
-      ...init,
-      runtimeAccessToken: this.config.runtimeAccessSecret,
-    });
+    const runtime = await this.getRuntime(env);
+    return runtime.app.request(path, init);
   }
 
   private async missingPiSession(response: Response, sessionId: string): Promise<boolean> {
@@ -719,33 +708,8 @@ export class EnvironmentService {
       return;
     }
     if (sandbox.state !== "started") throw new Error(`Sandbox is ${sandbox.state}`);
-    let processUp = false;
-    try {
-      await this.sandboxes.waitForRuntimeHealthy(sandbox, 5_000);
-      processUp = true;
-    } catch {
-      // Process is not answering on the runtime port.
-    }
-    let reachable = false;
-    if (processUp) {
-      try {
-        // /health is unauthenticated; /environment proves the access token still matches.
-        const probe = await this.sandboxes.fetchRuntime(sandbox, "/environment", {
-          method: "GET",
-          runtimeAccessToken: this.config.runtimeAccessSecret,
-        });
-        reachable = probe.ok;
-      } catch {
-        // Preview or auth failed even though curl health succeeded.
-      }
-    }
-    if (processUp && reachable) return;
-    const bundleDir = resolveRuntimeBundle(this.config.runtimeBundleDir);
-    await this.sandboxes.deployAndStartRuntime(sandbox, {
-      runtimeBundleLocalDir: bundleDir,
-      runtimeAccessToken: this.config.runtimeAccessSecret,
-      modelEnv: buildSandboxModelEnv(process.env),
-    });
+    // Pi lives in this process; only the sandbox lifecycle needs recovery.
+    await this.sandboxes.configureWebPreview(sandbox);
   }
 
   private async setStatus(
@@ -775,12 +739,212 @@ export class EnvironmentService {
     return row;
   }
 
+  /** Renames an auto-named workspace after the first thing the user asked it to do. */
+  async nameFromPrompt(userId: string, id: string, prompt: string) {
+    const row = this.requireOwned(userId, id);
+    if (!hasDefaultName(row)) return toEnvironmentDto(row);
+    const name = await titleFromPrompt(prompt, this.config.llm);
+    // Another request may have named it while the model was answering.
+    const current = this.requireOwned(userId, id);
+    if (!hasDefaultName(current)) return toEnvironmentDto(current);
+    const updatedAt = nowIso();
+    this.db
+      .update(environments)
+      .set({ name, updatedAt })
+      .where(eq(environments.id, id))
+      .run();
+    return toEnvironmentDto({ ...current, name, updatedAt });
+  }
+
+  // ---------------------------------------------------------------------------
+  // GitHub connection
+  // ---------------------------------------------------------------------------
+
+  githubStatus(userId: string) {
+    if (!this.github) return { configured: false as const, connected: false as const };
+    const row = this.db.select().from(githubConnections).where(eq(githubConnections.userId, userId)).get();
+    return {
+      configured: true as const,
+      installUrl: this.github.installUrl,
+      connected: !!row,
+      ...(row ? { login: row.login, name: row.name, avatarUrl: row.avatarUrl } : {}),
+    };
+  }
+
+  /** Links the GitHub account behind `tokens` to this browser user. */
+  async connectGitHub(userId: string, tokens: UserTokens) {
+    const github = this.requireGitHub();
+    const user = await github.getUser(tokens.accessToken);
+    await this.ensureUser(userId);
+    const now = nowIso();
+    const values = {
+      githubUserId: user.id,
+      login: user.login,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      accessToken: this.tokenCipher.encrypt(tokens.accessToken),
+      accessTokenExpiresAt: tokens.expiresAt,
+      refreshToken: tokens.refreshToken ? this.tokenCipher.encrypt(tokens.refreshToken) : null,
+      updatedAt: now,
+    };
+    this.db
+      .insert(githubConnections)
+      .values({ userId, createdAt: now, ...values })
+      .onConflictDoUpdate({ target: githubConnections.userId, set: values })
+      .run();
+    return user;
+  }
+
+  async disconnectGitHub(userId: string) {
+    const row = this.githubConnection(userId);
+    if (!row) return { ok: true };
+    if (this.github) {
+      try {
+        await this.github.revoke(this.tokenCipher.decrypt(row.accessToken));
+      } catch (err) {
+        console.warn("GitHub grant revoke failed", err);
+      }
+    }
+    this.db.delete(githubConnections).where(eq(githubConnections.userId, userId)).run();
+    return { ok: true };
+  }
+
+  async listGitHubRepos(userId: string) {
+    const token = await this.githubUserToken(userId);
+    return this.requireGitHub().listRepos(token);
+  }
+
+  /**
+   * Confirms the signed-in user can reach `repoUrl` through the app and returns
+   * "owner/repo", or null when it is not a GitHub repository or GitHub is not connected.
+   */
+  async verifyGitHubRepo(userId: string, repoUrl: string): Promise<string | null> {
+    const parsed = parseGitHubRepo(repoUrl);
+    if (!parsed || !this.github || !this.githubConnection(userId)) return null;
+    const token = await this.githubUserToken(userId);
+    try {
+      return (await this.github.getRepo(token, parsed.owner, parsed.repo)).fullName;
+    } catch (err) {
+      if (err instanceof GitHubError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  /** Commits the agent's work to a new branch, pushes it, and opens a pull request as the user. */
+  async createPullRequest(userId: string, environmentId: string, rawBody: unknown) {
+    const github = this.requireGitHub();
+    const env = this.requireOwned(userId, environmentId);
+    if (!env.githubRepo) throw new Error("Open this repository through your GitHub connection to create pull requests");
+    if (env.status !== "ready" || !env.sandboxId) throw new Error("Wait until the sandbox is ready");
+    const [owner, repo] = env.githubRepo.split("/") as [string, string];
+    const body = (rawBody ?? {}) as { title?: unknown; body?: unknown; draft?: unknown };
+    const title = typeof body.title === "string" && body.title.trim() ? body.title.trim().slice(0, 240) : env.name;
+    const description = typeof body.body === "string" && body.body.trim() ? body.body.trim() : "Opened from Cloud Agent.";
+
+    const userToken = await this.githubUserToken(userId);
+    const connection = this.githubConnection(userId)!;
+    const repoInfo = await github.getRepo(userToken, owner, repo);
+    if (!repoInfo.canPush) throw new Error(`Your GitHub account can't push to ${env.githubRepo}`);
+    const base = env.repoBranch ?? repoInfo.defaultBranch;
+
+    const sandbox = await this.sandboxes.get(env.sandboxId);
+    const path = this.config.workspacePath;
+    const run = async (command: string) => {
+      const result = await sandbox.process.executeCommand(command, path, undefined, 120);
+      return { ok: result.exitCode === 0, out: result.result.trim() };
+    };
+
+    // Keep pushing to the agent branch this workspace already opened; otherwise start one.
+    let branch = (await run("git rev-parse --abbrev-ref HEAD")).out;
+    if (!branch.startsWith("cloud-agent/")) {
+      branch = `cloud-agent/${slugify(title)}-${randomUUID().slice(0, 6)}`;
+      const created = await run(`git checkout -b ${shellQuote(branch)}`);
+      if (!created.ok) throw new Error(`Could not create branch: ${created.out}`);
+    }
+
+    const dirty = (await run("git status --porcelain")).out.length > 0;
+    if (dirty) {
+      await run("git add -A");
+      await sandbox.git.commit(path, title, connection.name || connection.login,
+        `${connection.githubUserId}+${connection.login}@users.noreply.github.com`);
+    }
+    const ahead = await run(`git rev-list --count ${shellQuote(`origin/${base}`)}..HEAD`);
+    if (!dirty && ahead.ok && ahead.out === "0") throw new Error("The agent hasn't changed any files yet");
+
+    const pushToken = await github.repoToken(owner, repo);
+    await sandbox.git.push(path, "x-access-token", pushToken, branch, "origin", true);
+
+    try {
+      const pr = await github.createPullRequest(userToken, { owner, repo, head: branch, base, title, body: description, draft: body.draft === true });
+      return { ...pr, branch, base, created: true };
+    } catch (err) {
+      // A later push to the same branch already updated its open pull request.
+      if (err instanceof GitHubError && err.status === 422 && /already exists/i.test(err.message)) {
+        const url = `https://github.com/${owner}/${repo}/pulls?q=${encodeURIComponent(`is:open head:${branch}`)}`;
+        return { url, number: 0, branch, base, created: false };
+      }
+      throw err;
+    }
+  }
+
+  /** Clone credentials only for repositories verified through the user's GitHub connection. */
+  private async cloneCredentials(row: EnvironmentRow): Promise<{ username?: string; password?: string }> {
+    if (!row.githubRepo || !this.github) return {};
+    const [owner, repo] = row.githubRepo.split("/") as [string, string];
+    return { username: "x-access-token", password: await this.github.repoToken(owner, repo) };
+  }
+
+  private githubConnection(userId: string) {
+    return this.db.select().from(githubConnections).where(eq(githubConnections.userId, userId)).get();
+  }
+
+  /** The user's GitHub token, refreshed when it is about to expire. */
+  private async githubUserToken(userId: string): Promise<string> {
+    const github = this.requireGitHub();
+    const row = this.githubConnection(userId);
+    if (!row) throw new Error("Connect your GitHub account first");
+    const expiresAt = row.accessTokenExpiresAt ? Date.parse(row.accessTokenExpiresAt) : Infinity;
+    if (expiresAt - Date.now() > 120_000) return this.tokenCipher.decrypt(row.accessToken);
+    if (!row.refreshToken) throw new Error("Your GitHub session expired. Connect GitHub again.");
+    let tokens: UserTokens;
+    try {
+      tokens = await github.refresh(this.tokenCipher.decrypt(row.refreshToken));
+    } catch {
+      this.db.delete(githubConnections).where(eq(githubConnections.userId, userId)).run();
+      throw new Error("Your GitHub session expired. Connect GitHub again.");
+    }
+    this.db
+      .update(githubConnections)
+      .set({
+        accessToken: this.tokenCipher.encrypt(tokens.accessToken),
+        accessTokenExpiresAt: tokens.expiresAt,
+        refreshToken: tokens.refreshToken ? this.tokenCipher.encrypt(tokens.refreshToken) : row.refreshToken,
+        updatedAt: nowIso(),
+      })
+      .where(eq(githubConnections.userId, userId))
+      .run();
+    return tokens.accessToken;
+  }
+
+  private requireGitHub(): GitHubApp {
+    if (!this.github) throw new Error("GitHub sign-in isn't set up on this server");
+    return this.github;
+  }
+
   private requireOwned(userId: string, id: string): EnvironmentRow {
     const row = this.requireRow(id);
     if (row.userId !== userId) throw new Error("forbidden");
     if (row.status === "deleted") throw new Error("Environment deleted");
     return row;
   }
+}
+
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "changes";
+}
+
+function hasDefaultName(row: EnvironmentRow): boolean {
+  return row.name === `workspace-${row.id.slice(0, 8)}`;
 }
 
 function deriveNameFromRepo(repoUrl: string): string {
@@ -797,31 +961,4 @@ function deriveNameFromRepo(repoUrl: string): string {
 function projectRuntimePath(path: string, project: ProjectRow): string {
   if (project.id === "default") return path;
   return `${path}?${new URLSearchParams({ projectId: project.id, previewPort: String(project.previewPort) })}`;
-}
-
-function resolveRuntimeBundle(configured: string): string {
-  const candidates = [
-    resolve(configured, "deploy"),
-    configured,
-    resolve(configured, "dist"),
-  ];
-
-  for (const dir of candidates) {
-    if (
-      existsSync(resolve(dir, "package.json")) &&
-      existsSync(resolve(dir, "server.js"))
-    ) {
-      return dir;
-    }
-    if (
-      existsSync(resolve(dir, "package.json")) &&
-      existsSync(resolve(dir, "dist/server.js"))
-    ) {
-      return dir;
-    }
-  }
-
-  throw new Error(
-    `Runtime deploy bundle not found under ${configured}. Run: pnpm --filter @cloud-agent/sandbox-runtime build`,
-  );
 }
