@@ -83,7 +83,7 @@ export function AgentLogo({
         position: "relative",
         flexShrink: 0,
       }}
-      aria-label="Cloud Agent Jelly Bot"
+      aria-label="AgentC Jelly Bot"
       role="img"
     >
       <svg

@@ -6,8 +6,8 @@ import { expect, it, vi } from "vitest";
 import { attachUiWebSocketProxy } from "./ws-proxy.js";
 import { mintUiToken } from "./ui-tokens.js";
 import type { EnvironmentService } from "./services/environments.js";
-import type { PiSessionRegistry } from "@cloud-agent/agent-runtime";
-import type { ServerEvent } from "@cloud-agent/protocol";
+import type { PiSessionRegistry } from "@agentc/agent-runtime";
+import type { ServerEvent } from "@agentc/protocol";
 
 it("syncs session events directly from the server and allows ping, reconnect and abort during a running prompt", async () => {
   const server = createServer();

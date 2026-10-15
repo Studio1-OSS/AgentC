@@ -30,16 +30,16 @@ importers:
 
   apps/control-plane:
     dependencies:
-      '@cloud-agent/agent-runtime':
+      '@agentc/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
-      '@cloud-agent/database':
+      '@agentc/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@cloud-agent/protocol':
+      '@agentc/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@cloud-agent/sandbox-client':
+      '@agentc/sandbox-client':
         specifier: workspace:*
         version: link:../../packages/sandbox-client
       '@hono/node-server':
@@ -131,10 +131,10 @@ importers:
 
   packages/agent-runtime:
     dependencies:
-      '@cloud-agent/protocol':
+      '@agentc/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@cloud-agent/sandbox-client':
+      '@agentc/sandbox-client':
         specifier: workspace:*
         version: link:../sandbox-client
       '@earendil-works/pi-ai':
@@ -171,7 +171,7 @@ importers:
 
   packages/database:
     dependencies:
-      '@cloud-agent/protocol':
+      '@agentc/protocol':
         specifier: workspace:*
         version: link:../protocol
       better-sqlite3:
@@ -209,7 +209,7 @@ importers:
 
   packages/sandbox-client:
     dependencies:
-      '@cloud-agent/protocol':
+      '@agentc/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@daytona/sdk':

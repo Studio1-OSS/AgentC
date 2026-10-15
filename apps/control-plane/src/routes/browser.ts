@@ -54,7 +54,7 @@ export function createBrowserRoutes(
     const authorization = c.req.header("authorization");
     const token = authorization
       ? authorization.startsWith("Bearer ") ? authorization.slice(7) : ""
-      : getCookie(c, "cloud_agent_workspace") ?? "";
+      : getCookie(c, "agentc_workspace") ?? "";
     const payload = verifyUiToken(token, secret);
     c.set("workspaceGrant", payload);
     const match = c.req.path.match(/^(?:\/ui\/api)?\/environments\/([^/]+)(?:\/|$)/);
@@ -66,10 +66,10 @@ export function createBrowserRoutes(
     if (authorization) {
       return c.json({ error: "Chat token cannot access this workspace" }, 403);
     }
-    let userId = await getSignedCookie(c, secret, "cloud_agent_guest");
+    let userId = await getSignedCookie(c, secret, "agentc_guest");
     if (!userId) {
       userId = `guest-${randomUUID()}`;
-      await setSignedCookie(c, "cloud_agent_guest", userId, secret, {
+      await setSignedCookie(c, "agentc_guest", userId, secret, {
         httpOnly: true,
         sameSite: "Lax",
         path: "/",
@@ -91,7 +91,7 @@ export function createBrowserRoutes(
       const payload = verifyUiToken(workspaceToken, secret);
       if (!payload) throw new Error("invalid or expired UI token");
       // Keep the link's workspace grant separate from this browser's guest identity.
-      setCookie(c, "cloud_agent_workspace", workspaceToken, {
+      setCookie(c, "agentc_workspace", workspaceToken, {
         httpOnly: true,
         sameSite: "Lax",
         path: "/ui",
@@ -150,7 +150,7 @@ export function createBrowserRoutes(
   });
   app.post("/environments/:id/pull-request", async (c) => {
     // Only the owner's own browser, never a shared workspace link, may push as their GitHub account.
-    const guest = await getSignedCookie(c, secret, "cloud_agent_guest");
+    const guest = await getSignedCookie(c, secret, "agentc_guest");
     if (!guest || guest !== c.get("userId")) return c.json({ error: "Only the workspace owner can open pull requests" }, 403);
     const body = await c.req.json().catch(() => ({}));
     return c.json(await service.createPullRequest(c.get("userId"), c.req.param("id"), body));

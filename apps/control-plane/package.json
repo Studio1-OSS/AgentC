@@ -1,5 +1,5 @@
 {
-  "name": "@cloud-agent/control-plane",
+  "name": "@agentc/control-plane",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,16 +12,16 @@
     "spike": "tsx src/spike.ts"
   },
   "dependencies": {
-    "@cloud-agent/database": "workspace:*",
-    "@cloud-agent/protocol": "workspace:*",
-    "@cloud-agent/sandbox-client": "workspace:*",
+    "@agentc/database": "workspace:*",
+    "@agentc/protocol": "workspace:*",
+    "@agentc/sandbox-client": "workspace:*",
     "@hono/node-server": "^1.19.0",
     "dotenv": "^17.2.2",
     "drizzle-orm": "^0.44.5",
     "hono": "^4.9.6",
     "ws": "^8.18.3",
     "zod": "^4.1.5",
-    "@cloud-agent/agent-runtime": "workspace:*"
+    "@agentc/agent-runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.18.1",

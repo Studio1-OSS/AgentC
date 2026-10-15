@@ -7,7 +7,7 @@ import {
   DEFAULT_WEB_PREVIEW_PORT,
   DEFAULT_WORKSPACE_PATH,
   webPreviewConfigPath,
-} from "@cloud-agent/protocol";
+} from "@agentc/protocol";
 
 export type DaytonaClientConfig = {
   apiKey: string;
@@ -168,8 +168,8 @@ export class SandboxClient {
 
   async configureWebPreview(sandbox: Sandbox, port = DEFAULT_WEB_PREVIEW_PORT): Promise<void> {
     const preview = await this.getSignedPreview(sandbox, port, 86400);
-    await sandbox.fs.createFolder("/home/daytona/.cloud-agent", "700");
-    if (port !== DEFAULT_WEB_PREVIEW_PORT) await sandbox.fs.createFolder("/home/daytona/.cloud-agent/previews", "700");
+    await sandbox.fs.createFolder("/home/daytona/.agentc", "700");
+    if (port !== DEFAULT_WEB_PREVIEW_PORT) await sandbox.fs.createFolder("/home/daytona/.agentc/previews", "700");
     await sandbox.fs.uploadFile(Buffer.from(JSON.stringify({
       url: preview.url,
       port: preview.port,

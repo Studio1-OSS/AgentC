@@ -4146,7 +4146,7 @@ textarea:focus {
 }
 
 /* ==========================================================================
-   Central Canvas (Devin Style with Cloud Agent Beta Brand)
+   Central Canvas (Devin Style with AgentC Beta Brand)
    ========================================================================== */
 
 .devin-canvas {
@@ -7185,7 +7185,7 @@ textarea:focus {
 }
 
 /* ==========================================================================
-   1. Floating GitHub Onboarding Card ("Open PRs with Cloud Agent")
+   1. Floating GitHub Onboarding Card ("Open PRs with AgentC")
    ========================================================================== */
 .devin-gh-toast {
   position: fixed;
@@ -7548,7 +7548,7 @@ textarea:focus {
 }
 
 /* ==========================================================================
-   3. Continuous Animated Cloud Agent & Lifelike Eye Blinking
+   3. Continuous Animated AgentC & Lifelike Eye Blinking
    ========================================================================== */
 @keyframes cloudFloatBreathing {
   0%, 100% {

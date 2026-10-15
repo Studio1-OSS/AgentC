@@ -46,19 +46,19 @@ async function main() {
 }
 
 function printHelp() {
-  console.log(`cloud-agent — open a Pi chat on a remote Daytona sandbox
+  console.log(`agentc — open a Pi chat on a remote Daytona sandbox
 
 Usage:
-  cloud-agent open [repoUrl]     Create env (or empty), wait, open browser chat
-  cloud-agent list               List environments
-  cloud-agent resume <id>        Start sleeping env and open chat
-  cloud-agent stop <id>          Stop sandbox (filesystem persists)
-  cloud-agent rm <id>            Delete environment + sandbox
+  agentc open [repoUrl]     Create env (or empty), wait, open browser chat
+  agentc list               List environments
+  agentc resume <id>        Start sleeping env and open chat
+  agentc stop <id>          Stop sandbox (filesystem persists)
+  agentc rm <id>            Delete environment + sandbox
 
 Env:
-  CLOUD_AGENT_URL            default http://127.0.0.1:8787
+  AGENTC_URL            default http://127.0.0.1:8787
   CONTROL_PLANE_API_KEY      API key for the control plane
-  CLOUD_AGENT_USER_ID        optional user id (default: default-user)
+  AGENTC_USER_ID        optional user id (default: default-user)
   DAYTONA_API_KEY / OPENROUTER_API_KEY  required by the control plane
 
 Flags for open:
@@ -84,7 +84,7 @@ async function ensureControlPlane(api: ApiClient): Promise<void> {
       env: process.env,
     }).unref();
   } else if (existsSync(srcEntry)) {
-    spawn("pnpm", ["--filter", "@cloud-agent/control-plane", "dev"], {
+    spawn("pnpm", ["--filter", "@agentc/control-plane", "dev"], {
       cwd: repoRoot,
       detached: true,
       stdio: "ignore",
@@ -93,7 +93,7 @@ async function ensureControlPlane(api: ApiClient): Promise<void> {
     }).unref();
   } else {
     throw new Error(
-      `Control plane not running at ${loadCliConfig().baseUrl} and no local build found. Run: pnpm --filter @cloud-agent/control-plane build && pnpm --filter @cloud-agent/control-plane start`,
+      `Control plane not running at ${loadCliConfig().baseUrl} and no local build found. Run: pnpm --filter @agentc/control-plane build && pnpm --filter @agentc/control-plane start`,
     );
   }
 
@@ -157,14 +157,14 @@ async function cmdList(api: ApiClient) {
 }
 
 async function cmdStop(api: ApiClient, id?: string) {
-  if (!id) throw new Error("Usage: cloud-agent stop <id>");
+  if (!id) throw new Error("Usage: agentc stop <id>");
   await ensureControlPlane(api);
   const env = await api.stopEnvironment(id);
   console.log(`Stopped ${env.id} (${env.status})`);
 }
 
 async function cmdStart(api: ApiClient, baseUrl: string, id?: string) {
-  if (!id) throw new Error("Usage: cloud-agent resume <id>");
+  if (!id) throw new Error("Usage: agentc resume <id>");
   await ensureControlPlane(api);
   console.log(`Starting ${id}…`);
   const env = await api.startEnvironment(id);
@@ -175,7 +175,7 @@ async function cmdStart(api: ApiClient, baseUrl: string, id?: string) {
 }
 
 async function cmdDelete(api: ApiClient, id?: string) {
-  if (!id) throw new Error("Usage: cloud-agent rm <id>");
+  if (!id) throw new Error("Usage: agentc rm <id>");
   await ensureControlPlane(api);
   await api.removeEnvironment(id);
   console.log(`Deleted ${id}`);

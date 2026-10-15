@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { Markdown } from "@/components/Markdown";
 import type { Bootstrap, ChatItem } from "@/lib/session";
 import { verifiedPreview } from "@/lib/chat-events";
+import { displayModelName } from "@/lib/model-name";
 
 type Props = {
   bootstrap: Bootstrap | null;
@@ -59,14 +60,14 @@ export function Chat({
       <header className="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
         <div className="min-w-0">
           <p className="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase">
-            Cloud Agent
+            AgentC
           </p>
           <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-ink">
             {bootstrap?.projectName ?? bootstrap?.environmentName ?? "Session"}
           </h1>
           <p className="mt-1 truncate font-mono text-xs text-ink-soft">
             {bootstrap
-              ? `${bootstrap.provider} · ${bootstrap.model}`
+              ? `${bootstrap.provider} · ${displayModelName(bootstrap.model)}`
               : "Connecting…"}
             {bootstrap?.repoUrl ? ` · ${bootstrap.repoUrl}` : ""}
           </p>

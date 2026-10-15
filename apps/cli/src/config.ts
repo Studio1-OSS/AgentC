@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../..");
 
 loadEnv({ path: resolve(repoRoot, ".env") });
-loadEnv({ path: resolve(homedir(), ".cloud-agent", "config.env") });
+loadEnv({ path: resolve(homedir(), ".agentc", "config.env") });
 
 export type CliConfig = {
   baseUrl: string;
@@ -18,17 +18,17 @@ export type CliConfig = {
 
 export function loadCliConfig(): CliConfig {
   return {
-    baseUrl: (process.env.CLOUD_AGENT_URL ?? "http://127.0.0.1:8787").replace(
+    baseUrl: (process.env.AGENTC_URL ?? "http://127.0.0.1:8787").replace(
       /\/$/,
       "",
     ),
     apiKey: process.env.CONTROL_PLANE_API_KEY ?? "dev-api-key-change-me",
-    userId: process.env.CLOUD_AGENT_USER_ID ?? "default-user",
+    userId: process.env.AGENTC_USER_ID ?? "default-user",
   };
 }
 
 export function ensureConfigDir(): string {
-  const dir = resolve(homedir(), ".cloud-agent");
+  const dir = resolve(homedir(), ".agentc");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -39,7 +39,7 @@ export function rememberLastChat(url: string): void {
 }
 
 export function readLastChat(): string | null {
-  const path = resolve(homedir(), ".cloud-agent", "last-chat.url");
+  const path = resolve(homedir(), ".agentc", "last-chat.url");
   if (!existsSync(path)) return null;
   return readFileSync(path, "utf8").trim() || null;
 }

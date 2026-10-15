@@ -56,7 +56,7 @@ export function AccountPopover({
   if (!isOpen) return null;
 
   const displayName = userEmail ? userEmail.split("@")[0] : "Souradeep";
-  const displayEmail = userEmail || "souradeep@cloudagent.dev";
+  const displayEmail = userEmail || "souradeep@agentc.dev";
   const initial = (displayName[0] ?? "S").toUpperCase();
   const isZinc = theme === "zinc";
 

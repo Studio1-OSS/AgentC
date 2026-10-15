@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { ProjectIdSchema } from "@cloud-agent/protocol";
+import { ProjectIdSchema } from "@agentc/protocol";
 
 export type UiTokenPayload = {
   userId: string;

@@ -3,17 +3,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { createSandboxClientFromEnv } from "@cloud-agent/sandbox-client";
-import { PiSessionRegistry, createRemoteTools, loadRemoteAgentsFiles } from "@cloud-agent/agent-runtime";
+import { createSandboxClientFromEnv } from "@agentc/sandbox-client";
+import { PiSessionRegistry, createRemoteTools, loadRemoteAgentsFiles } from "@agentc/agent-runtime";
 import { loadConfig } from "./config.js";
 
 const config = loadConfig();
 const client = createSandboxClientFromEnv();
-const directory = await mkdtemp(join(tmpdir(), "cloud-agent-spike-"));
+const directory = await mkdtemp(join(tmpdir(), "agentc-spike-"));
 const repoIndex = process.argv.indexOf("--repo");
 const repo = repoIndex < 0 ? "https://github.com/octocat/Hello-World.git" : process.argv[repoIndex + 1]!;
 console.log("Creating Daytona sandbox; Pi runs on this server with", config.llm.providerId, config.llm.modelId);
-const sandbox = await client.create({ name: `spike-${Date.now()}`, labels: { "cloud-agent/spike": "true" } });
+const sandbox = await client.create({ name: `spike-${Date.now()}`, labels: { "agentc/spike": "true" } });
 console.log("Sandbox:", sandbox.id);
 let registry: PiSessionRegistry | undefined;
 const openRegistry = () => new PiSessionRegistry({
@@ -34,8 +34,8 @@ try {
     else if (event.type === "tool.start") console.log("Tool:", event.tool);
     else if (event.type === "error") console.error("Agent:", event.message);
   });
-  await registry.prompt(id, "Use bash to inspect pwd and git remote -v. Use read to inspect README (or README.md). Use write to create cloud-agent-smoke.txt containing exactly REMOTE_TOOLS_OK. Use edit to change it to REMOTE_EDIT_OK. Use read to verify it. Reply briefly when done.");
-  assert.equal((await sandbox.fs.downloadFile(join(client.workspacePath, "cloud-agent-smoke.txt"))).toString().trim(), "REMOTE_EDIT_OK");
+  await registry.prompt(id, "Use bash to inspect pwd and git remote -v. Use read to inspect README (or README.md). Use write to create agentc-smoke.txt containing exactly REMOTE_TOOLS_OK. Use edit to change it to REMOTE_EDIT_OK. Use read to verify it. Reply briefly when done.");
+  assert.equal((await sandbox.fs.downloadFile(join(client.workspacePath, "agentc-smoke.txt"))).toString().trim(), "REMOTE_EDIT_OK");
   console.log("\nRemote file tools verified; stopping and resuming...");
   registry.disposeAll();
   await sandbox.stop(60);
@@ -43,7 +43,7 @@ try {
   registry = openRegistry();
   await registry.openSession(id);
   assert(registry.getMessages(id).some((message) => message.role === "toolResult"));
-  await registry.prompt(id, "Use bash to cat cloud-agent-smoke.txt and confirm the existing file survived sandbox stop/start. Reply with its contents.");
+  await registry.prompt(id, "Use bash to cat agentc-smoke.txt and confirm the existing file survived sandbox stop/start. Reply with its contents.");
   assert(registry.getMessages(id).length > 0);
   console.log("Spike complete: server sessions and sandbox files survive restart.");
 } finally {

@@ -1,11 +1,11 @@
-import type { ServerEvent } from "@cloud-agent/protocol";
+import type { ServerEvent } from "@agentc/protocol";
 import {
   NEBIUS_PROVIDER_ID,
   OPENROUTER_PROVIDER_ID,
   buildNebiusPiProviderRegistration,
   resolveLlmProviderConfig,
   type LlmProviderConfig,
-} from "@cloud-agent/protocol";
+} from "@agentc/protocol";
 import {
   createAgentSession,
   DefaultResourceLoader,

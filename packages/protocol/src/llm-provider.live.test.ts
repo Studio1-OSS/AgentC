@@ -24,8 +24,8 @@ describe.runIf(hasOpenRouter)("OpenRouter live smoke", () => {
         headers: {
           Authorization: `Bearer ${config.apiKey}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://cloud-agent.local",
-          "X-Title": "cloud-agent-live-test",
+          "HTTP-Referer": "https://agentc.local",
+          "X-Title": "agentc-live-test",
         },
         body: JSON.stringify({
           model: config.modelId,

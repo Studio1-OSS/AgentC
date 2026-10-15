@@ -60,7 +60,7 @@ export function GitHubConnectModal({ status, onClose, onOpenRepo, onStatusChange
   }
 
   async function disconnect() {
-    if (!window.confirm("Disconnect your GitHub account from Cloud Agent?")) return;
+    if (!window.confirm("Disconnect your GitHub account from AgentC?")) return;
     setDisconnecting(true);
     try {
       await disconnectGitHub();
@@ -92,7 +92,7 @@ export function GitHubConnectModal({ status, onClose, onOpenRepo, onStatusChange
           </h2>
           <p className="devin-gh-modal-subtitle">
             {connected
-              ? "Cloud Agent clones it into a private sandbox, works on it, and opens pull requests as you."
+              ? "AgentC clones it into a private sandbox, works on it, and opens pull requests as you."
               : "Sign in with GitHub to work on your own repositories, including private ones, and open pull requests."}
           </p>
         </div>
@@ -124,7 +124,7 @@ export function GitHubConnectModal({ status, onClose, onOpenRepo, onStatusChange
                 <span className="gh-account-name">{status.name || status.login}</span>
                 <span className="gh-account-login">@{status.login}</span>
               </div>
-              <a className="gh-account-action" href={GITHUB_INSTALL_URL} title="Choose which repositories Cloud Agent can access">
+              <a className="gh-account-action" href={GITHUB_INSTALL_URL} title="Choose which repositories AgentC can access">
                 <Settings2 size={14} />
                 <span>Manage access</span>
               </a>
@@ -172,7 +172,7 @@ export function GitHubConnectModal({ status, onClose, onOpenRepo, onStatusChange
                 <p className="gh-note">No repositories match “{query}”.</p>
               ) : (
                 <p className="gh-note">
-                  Cloud Agent can't see any repositories yet. <a href={GITHUB_INSTALL_URL}>Choose repositories</a>
+                  AgentC can't see any repositories yet. <a href={GITHUB_INSTALL_URL}>Choose repositories</a>
                 </p>
               )}
             </div>

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { OpenProjectChatSchema, SessionRequestSchema } from "@cloud-agent/protocol";
+import { OpenProjectChatSchema, SessionRequestSchema } from "@agentc/protocol";
 import type { EnvironmentService } from "../services/environments.js";
 import type { AuthVariables } from "../middleware/auth.js";
 

@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { EnvironmentService } from "./environments.js";
-import { SandboxClient } from "@cloud-agent/sandbox-client";
-import { WEB_PREVIEW_CONFIG_PATH } from "@cloud-agent/protocol";
-import { createDatabase, migrateDatabase } from "@cloud-agent/database";
+import { SandboxClient } from "@agentc/sandbox-client";
+import { WEB_PREVIEW_CONFIG_PATH } from "@agentc/protocol";
+import { createDatabase, migrateDatabase } from "@agentc/database";
 
 afterEach(() => vi.unstubAllEnvs());
 

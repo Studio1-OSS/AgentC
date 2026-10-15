@@ -38,7 +38,7 @@ describe("GitHub sign-in routes", () => {
     const { state, redirectUri, cookie } = await startSignIn(app);
     expect(state.length).toBeGreaterThan(20);
     expect(redirectUri).toBe("http://localhost:5173/ui/api/github/callback");
-    expect(cookie).toMatch(/^cloud_agent_gh_state=/);
+    expect(cookie).toMatch(/^agentc_gh_state=/);
   });
 
   it("links the account when the state matches", async () => {

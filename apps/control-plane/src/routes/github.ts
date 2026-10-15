@@ -4,7 +4,7 @@ import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 import type { AuthVariables } from "../middleware/auth.js";
 import type { EnvironmentService } from "../services/environments.js";
 
-const STATE_COOKIE = "cloud_agent_gh_state";
+const STATE_COOKIE = "agentc_gh_state";
 const APP_PATH = "/ui/?view=app";
 
 /** Browser routes for linking a GitHub account through the GitHub App's OAuth flow. */

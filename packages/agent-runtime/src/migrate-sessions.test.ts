@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import { importSandboxSessions } from "./migrate-sessions.js";
 
 it("imports legacy transcripts once without overwriting server copies or importing provider credentials", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "cloud-agent-migration-"));
+  const directory = await mkdtemp(join(tmpdir(), "agentc-migration-"));
   const path = "/home/daytona/.pi/agent/sessions/encoded-cwd/session.jsonl";
   const content = Buffer.from('{"type":"session","id":"legacy","cwd":"/remote/project"}\n');
   const sandbox = {

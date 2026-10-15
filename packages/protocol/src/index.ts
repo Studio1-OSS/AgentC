@@ -210,9 +210,9 @@ export const RUNTIME_VERSION = 3;
 /** Default ports. */
 export const DEFAULT_RUNTIME_PORT = 4096;
 export const DEFAULT_WEB_PREVIEW_PORT = 3000;
-export const WEB_PREVIEW_CONFIG_PATH = "/home/daytona/.cloud-agent/preview.json";
+export const WEB_PREVIEW_CONFIG_PATH = "/home/daytona/.agentc/preview.json";
 export function webPreviewConfigPath(port = DEFAULT_WEB_PREVIEW_PORT): string {
-  return port === DEFAULT_WEB_PREVIEW_PORT ? WEB_PREVIEW_CONFIG_PATH : `/home/daytona/.cloud-agent/previews/${port}.json`;
+  return port === DEFAULT_WEB_PREVIEW_PORT ? WEB_PREVIEW_CONFIG_PATH : `/home/daytona/.agentc/previews/${port}.json`;
 }
 export const WebPreviewSchema = z.object({
   url: z.string().url(),

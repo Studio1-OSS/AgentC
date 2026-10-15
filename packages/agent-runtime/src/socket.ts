@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { ClientWsMessageSchema, type ServerEvent } from "@cloud-agent/protocol";
+import { ClientWsMessageSchema, type ServerEvent } from "@agentc/protocol";
 import type { PiSessionRegistry } from "./pi.js";
 
 export async function handleSessionSocket(ws: WebSocket, sessionId: string, registry: PiSessionRegistry): Promise<void> {

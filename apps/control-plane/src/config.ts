@@ -7,7 +7,7 @@ import {
   DEFAULT_NEBIUS_MODEL,
   resolveLlmProviderConfig,
   type LlmProviderConfig,
-} from "@cloud-agent/protocol";
+} from "@agentc/protocol";
 
 const here = dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: resolve(here, "../../../.env") });
@@ -79,7 +79,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     port: Number(env.PORT ?? 8787),
     host: env.HOST ?? "0.0.0.0",
     apiKey,
-    databaseUrl: env.DATABASE_URL ?? `file:${resolve(dataDir, "cloud-agent.db")}`,
+    databaseUrl: env.DATABASE_URL ?? `file:${resolve(dataDir, "agentc.db")}`,
     runtimeAccessSecret,
     browserSessionSecret: env.BROWSER_SESSION_SECRET?.trim() || runtimeAccessSecret,
     workspacePath: env.WORKSPACE_PATH ?? "/home/daytona/workspace/project",

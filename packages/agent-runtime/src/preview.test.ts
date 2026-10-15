@@ -31,7 +31,7 @@ describe("sandbox web previews", () => {
   it("rejects another project's port", async () => {
     const other = createPreviewTool(3001, { readFile, probe });
     await expect(other.execute("call", {}, undefined, undefined, {} as never)).rejects.toThrow("does not match");
-    expect(readFile).toHaveBeenCalledWith("/home/daytona/.cloud-agent/previews/3001.json");
+    expect(readFile).toHaveBeenCalledWith("/home/daytona/.agentc/previews/3001.json");
     expect(probe).not.toHaveBeenCalled();
   });
   it("rejects expired URLs", async () => {

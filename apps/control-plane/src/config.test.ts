@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "./config.js";
-import { NEBIUS_PROVIDER_ID, OPENROUTER_PROVIDER_ID } from "@cloud-agent/protocol";
+import { NEBIUS_PROVIDER_ID, OPENROUTER_PROVIDER_ID } from "@agentc/protocol";
 
 describe("loadConfig", () => {
   it("resolves OpenRouter when OPENROUTER_API_KEY is present", () => {
@@ -21,13 +21,13 @@ describe("loadConfig", () => {
     const config = loadConfig({
       NEBIUS_API_KEY: "test-nebius-key",
       PI_PROVIDER: "nebius",
-      PI_MODEL: "moonshotai/Kimi-K2.7-Code",
+      PI_MODEL: "meta-models/muse-spark-open",
       CONTROL_PLANE_API_KEY: "dev",
       RUNTIME_ACCESS_SECRET: "secret",
     });
 
     expect(config.llm.providerId).toBe(NEBIUS_PROVIDER_ID);
-    expect(config.llm.modelId).toBe("moonshotai/Kimi-K2.7-Code");
+    expect(config.llm.modelId).toBe("meta-models/muse-spark-open");
     expect(config.llm.baseUrl).toContain("tokenfactory.nebius.com");
   });
 });

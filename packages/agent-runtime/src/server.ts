@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { type LlmProviderConfig, RUNTIME_VERSION } from "@cloud-agent/protocol";
+import { type LlmProviderConfig, RUNTIME_VERSION } from "@agentc/protocol";
 import type { ProjectRegistries } from "./projects.js";
 
 /** Internal requests stay in this process; no sandbox HTTP agent server is deployed. */

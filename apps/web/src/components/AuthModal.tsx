@@ -44,12 +44,12 @@ export function AuthModal({
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      onSuccess(`${provider}_user@cloudagent.dev`);
+      onSuccess(`${provider}_user@agentc.dev`);
     }, 500);
   }
 
   function handleGuest() {
-    onSuccess("guest@cloudagent.dev");
+    onSuccess("guest@agentc.dev");
   }
 
   return (
@@ -102,7 +102,7 @@ export function AuthModal({
             {/* Clean, short pitch text */}
             <div className="text-center sm:text-left">
               <h3 className="text-[20px] sm:text-[22px] font-semibold tracking-tight text-slate-950 leading-tight mb-1.5">
-                Meet Cloud Agent.
+                Meet AgentC.
               </h3>
               <p className="text-[13px] text-slate-600 leading-relaxed font-normal">
                 Writes code, runs tests, and ships pull requests in isolated Daytona sandboxes. Yours is next.
@@ -120,7 +120,7 @@ export function AuthModal({
             {/* Header */}
             <div className="mb-6 pr-8">
               <h2 className="text-[23px] sm:text-[25px] font-semibold tracking-tight text-slate-950 mb-1">
-                {mode === "signin" ? "Sign in to Cloud Agent" : "Create your account"}
+                {mode === "signin" ? "Sign in to AgentC" : "Create your account"}
               </h2>
               <p className="text-[13.5px] text-slate-500 leading-normal">
                 {mode === "signin"

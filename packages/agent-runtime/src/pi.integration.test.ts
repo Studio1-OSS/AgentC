@@ -5,11 +5,11 @@ import { expect, it, vi } from "vitest";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { ModelRuntime, createWriteToolDefinition } from "@earendil-works/pi-coding-agent";
-import { DEFAULT_OPENROUTER_MODEL, type ServerEvent } from "@cloud-agent/protocol";
+import { DEFAULT_OPENROUTER_MODEL, type ServerEvent } from "@agentc/protocol";
 import { PiSessionRegistry } from "./pi.js";
 
 it("keeps the real Pi transcript and completed tools intact when a streamed request falls back", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "cloud-agent-pi-integration-"));
+  const directory = mkdtempSync(join(tmpdir(), "agentc-pi-integration-"));
   const registry = new PiSessionRegistry({ cwd: directory, agentDir: join(directory, ".pi"), previewPort: 3001, tools: [createWriteToolDefinition(directory)],
     llm: { providerId: "openrouter", modelId: DEFAULT_OPENROUTER_MODEL, apiKey: "test-key", apiKeyEnvVar: "OPENROUTER_API_KEY" } });
   const stream = vi.spyOn(ModelRuntime.prototype, "streamSimple").mockImplementation((model, context) => {

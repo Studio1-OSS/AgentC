@@ -1,10 +1,10 @@
 {
-  "name": "@cloud-agent/cli",
+  "name": "@agentc/cli",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "cloud-agent": "./dist/index.js"
+    "agentc": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node ./scripts/chmod-bin.mjs",

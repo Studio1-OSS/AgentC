@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, posix } from "node:path";
-import { shellQuote, type SandboxClient } from "@cloud-agent/sandbox-client";
-import { ProjectIdSchema } from "@cloud-agent/protocol";
+import { shellQuote, type SandboxClient } from "@agentc/sandbox-client";
+import { ProjectIdSchema } from "@agentc/protocol";
 
 type Sandbox = Awaited<ReturnType<SandboxClient["get"]>>;
 

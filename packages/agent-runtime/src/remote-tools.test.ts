@@ -72,7 +72,7 @@ describe("Daytona tool boundary", () => {
   });
   it("checks preview readiness inside Daytona using the public hostname", async () => {
     const { files, sandbox, remote } = setup();
-    files.set("/home/daytona/.cloud-agent/previews/3001.json", Buffer.from(JSON.stringify({
+    files.set("/home/daytona/.agentc/previews/3001.json", Buffer.from(JSON.stringify({
       url: "https://3001-signed.proxy.daytona.work", port: 3001,
       expiresAt: new Date(Date.now() + 86400_000).toISOString(),
     })));

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { createDatabase, migrateDatabase, users, environments, projects, sessions } from "@cloud-agent/database";
+import { createDatabase, migrateDatabase, users, environments, projects, sessions } from "@agentc/database";
 import { EnvironmentService } from "./environments.js";
 import { verifyUiToken } from "../ui-tokens.js";
 import type { AppConfig } from "../config.js";

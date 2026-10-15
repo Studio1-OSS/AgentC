@@ -130,7 +130,7 @@ export function App() {
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [userEmail, setUserEmail] = useState<string | null>(() => {
     try {
-      return localStorage.getItem("cloud_agent_user");
+      return localStorage.getItem("agentc_user");
     } catch {
       return null;
     }
@@ -150,7 +150,7 @@ export function App() {
   const [theme, setTheme] = useState<"light" | "zinc">(() => {
     try {
       return (
-        (localStorage.getItem("cloud_agent_dashboard_theme") as "light" | "zinc") ??
+        (localStorage.getItem("agentc_dashboard_theme") as "light" | "zinc") ??
         "zinc"
       );
     } catch {
@@ -189,7 +189,7 @@ export function App() {
   const agentsList = [
     {
       id: "cloud" as CloudAgentId,
-      name: "Cloud Agent",
+      name: "AgentC",
       role: "Full-Stack Engineer",
       variant: "blue" as const,
       color: "#3b82f6",
@@ -339,7 +339,7 @@ export function App() {
   const handleToggleTheme = (newTheme: "light" | "zinc") => {
     setTheme(newTheme);
     try {
-      localStorage.setItem("cloud_agent_dashboard_theme", newTheme);
+      localStorage.setItem("agentc_dashboard_theme", newTheme);
     } catch {}
   };
 
@@ -347,9 +347,9 @@ export function App() {
     setUserEmail(email);
     try {
       if (email) {
-        localStorage.setItem("cloud_agent_user", email);
+        localStorage.setItem("agentc_user", email);
       } else {
-        localStorage.removeItem("cloud_agent_user");
+        localStorage.removeItem("agentc_user");
       }
     } catch {}
   };
@@ -369,7 +369,7 @@ export function App() {
     setSidebarCollapsed((prev) => {
       const next = !prev;
       try {
-        localStorage.setItem("cloud_agent_sidebar_collapsed", String(next));
+        localStorage.setItem("agentc_sidebar_collapsed", String(next));
       } catch {}
       return next;
     });
@@ -471,7 +471,7 @@ export function App() {
       const prompt = lastPrompt?.kind === "user" ? lastPrompt.text.trim() : "";
       notify({
         kind: "agent-done",
-        title: "Cloud Agent finished a run",
+        title: "AgentC finished a run",
         body: prompt ? (prompt.length > 90 ? `${prompt.slice(0, 90)}…` : prompt) : undefined,
         workspaceId: live.bootstrap?.environmentId,
       });
@@ -847,10 +847,10 @@ export function App() {
       customize: "Customize",
     };
     const repoUrl = live.bootstrap?.repoUrl ?? selected?.repoUrl ?? null;
-    let title = "New session · Cloud Agent";
-    if (view === "landing") title = "Cloud Agent — Autonomous AI coding agent in secure cloud sandboxes";
-    else if (token || selected) title = `${repoUrl ? repoLabel(repoUrl) : selected?.name ?? "Session"} · Cloud Agent`;
-    else if (activeNav !== "workspaces") title = `${pageTitles[activeNav]} · Cloud Agent`;
+    let title = "New session · AgentC";
+    if (view === "landing") title = "AgentC — Autonomous AI coding agent in secure cloud sandboxes";
+    else if (token || selected) title = `${repoUrl ? repoLabel(repoUrl) : selected?.name ?? "Session"} · AgentC`;
+    else if (activeNav !== "workspaces") title = `${pageTitles[activeNav]} · AgentC`;
     document.title = title;
 
     let robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
@@ -897,7 +897,7 @@ export function App() {
           onSuccess={(email) => {
             if (email) {
               try {
-                localStorage.setItem("cloud_agent_user", email);
+                localStorage.setItem("agentc_user", email);
               } catch {}
               setUserEmail(email);
             }
@@ -1481,7 +1481,7 @@ export function App() {
           >
             <Menu size={19} />
           </button>
-          <button type="button" className="mobile-appbar-brand" onClick={handleNewSession} aria-label="Cloud Agent home">
+          <button type="button" className="mobile-appbar-brand" onClick={handleNewSession} aria-label="AgentC home">
             <AgentLogo size={26} showShadow={false} />
             <span className="mobile-appbar-wordmark">
               cloud<span>agent</span>
@@ -1793,7 +1793,7 @@ export function App() {
                     {userEmail || "Guest Developer"}
                   </div>
                   <div className="devin-settings-item-desc">
-                    {userEmail ? "Connected to Cloud Agent account" : "Local guest workspace"}
+                    {userEmail ? "Connected to AgentC account" : "Local guest workspace"}
                   </div>
                 </div>
                 {userEmail ? (
@@ -1862,7 +1862,7 @@ export function App() {
                 <ArrowUpRight size={16} className="devin-support-arrow" aria-hidden="true" />
               </a>
               <a
-                href="https://github.com/Studio1-OSS/cloud-agent/issues"
+                href="https://github.com/Studio1-OSS/agentc/issues"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="devin-support-card"
@@ -1899,7 +1899,7 @@ export function App() {
             </button>
             <div className="devin-settings-header">
               <h2 className="devin-settings-title">Changelog & Release Notes</h2>
-              <p className="devin-settings-subtitle">Latest improvements to Cloud Agent powered by Daytona.</p>
+              <p className="devin-settings-subtitle">Latest improvements to AgentC, powered by the Meta Muse Spark model and Daytona.</p>
             </div>
             <div className="devin-changelog-list">
               <div className="devin-changelog-item">
@@ -1909,7 +1909,7 @@ export function App() {
                 </div>
                 <ul className="devin-changelog-notes">
                   <li>Unified borderless docked input bar matching Devin reference design.</li>
-                  <li>Direct Cloud Agent persona selection available within docked chat.</li>
+                  <li>Direct AgentC persona selection available within docked chat.</li>
                   <li>Hardware-isolated Daytona microVM runner with realistic multi-phase latency.</li>
                   <li>Monochromatic Daytona branding with pure black light mode support.</li>
                 </ul>
@@ -1938,10 +1938,10 @@ export function App() {
           <div className="devin-gh-toast-body">
             <div className="devin-gh-toast-header">
               <Github size={18} className="devin-gh-toast-icon" />
-              <span className="devin-gh-toast-title">Open PRs with Cloud Agent</span>
+              <span className="devin-gh-toast-title">Open PRs with AgentC</span>
             </div>
             <p className="devin-gh-toast-desc">
-              Connect your codebase to try Cloud Agent for free
+              Connect your codebase to try AgentC for free
             </p>
           </div>
           <div className="devin-gh-toast-actions">
@@ -2010,7 +2010,7 @@ export function App() {
           )}
           <textarea
             className="devin-prompt-textarea"
-            placeholder={`Ask ${agentsList.find((a) => a.id === selectedAgentId)?.name || "Cloud Agent"} to build features, fix bugs, or work on your code`}
+            placeholder={`Ask ${agentsList.find((a) => a.id === selectedAgentId)?.name || "AgentC"} to build features, fix bugs, or work on your code`}
             value={centralPrompt}
             onChange={(e) => {
               setCentralPrompt(e.target.value);
@@ -2238,7 +2238,7 @@ export function App() {
                     setModeMenuOpen(false);
                     setSendMenuOpen(false);
                   }}
-                  title="Select Cloud Agent Persona"
+                  title="Select AgentC Persona"
                 >
                   <AgentLogo size={20} variant={agentsList.find(a => a.id === selectedAgentId)?.variant ?? "blue"} showShadow={false} />
                   <span className="devin-agent-btn-name">{agentsList.find(a => a.id === selectedAgentId)?.name}</span>
@@ -2424,8 +2424,8 @@ export function App() {
       panelWorkspaceId && githubRepo
         ? (draft: boolean) =>
             createPullRequest(panelWorkspaceId, {
-              title: sessionTitle === "New session" ? "Changes from Cloud Agent" : sessionTitle,
-              body: firstPrompt ? `Opened from Cloud Agent.\n\n**Task:** ${firstPrompt}` : "Opened from Cloud Agent.",
+              title: sessionTitle === "New session" ? "Changes from AgentC" : sessionTitle,
+              body: firstPrompt ? `Opened from AgentC.\n\n**Task:** ${firstPrompt}` : "Opened from AgentC.",
               draft,
             })
         : undefined;
@@ -2630,7 +2630,7 @@ export function App() {
           <div className="devin-docked-bottom-container">
             {renderPromptCard(true)}
             <div className="devin-docked-disclaimer">
-              Cloud Agent can make mistakes. Verify important info.
+              AgentC can make mistakes. Verify important info.
             </div>
           </div>
         </div>
@@ -2677,7 +2677,7 @@ export function App() {
               className="devin-brand-identity"
               onClick={goToLanding}
               style={{ cursor: "pointer" }}
-              title="Return to Cloud Agent Overview"
+              title="Return to AgentC Overview"
             >
               <AgentLogo size={36} className="devin-logo-mark" variant={agentsList.find(a => a.id === selectedAgentId)?.variant ?? "blue"} />
               <span className="devin-brand-heading">
@@ -2946,7 +2946,7 @@ export function App() {
             <p className="devin-page-subtitle">Central engineering guidelines, autonomous agent rules, and sandbox environment runbooks.</p>
           </div>
           <a
-            href="https://github.com/Studio1-OSS/cloud-agent"
+            href="https://github.com/Studio1-OSS/agentc"
             target="_blank"
             rel="noopener noreferrer"
             className="obsidian-glass-button devin-glass-link"
@@ -3004,7 +3004,7 @@ export function App() {
             <p className="card-description">REST and WebSocket endpoints for programmatic workspace provisioning, streaming chat, and browser subagents.</p>
             <div className="card-footer-row">
               <span>API documentation</span>
-              <a href="https://github.com/Studio1-OSS/cloud-agent" target="_blank" rel="noopener noreferrer" className="card-btn">API docs →</a>
+              <a href="https://github.com/Studio1-OSS/agentc" target="_blank" rel="noopener noreferrer" className="card-btn">API docs →</a>
             </div>
           </div>
         </div>
@@ -3017,8 +3017,8 @@ export function App() {
       <div className="devin-page-view">
         <div className="devin-page-header">
           <div>
-            <h1 className="devin-page-title">Customize Cloud Agent</h1>
-            <p className="devin-page-subtitle">Configure AI coding models, sandbox compute sizing, agent personas, and dashboard preferences.</p>
+            <h1 className="devin-page-title">Customize AgentC</h1>
+            <p className="devin-page-subtitle">Configure the Meta Muse Spark coding model, sandbox compute sizing, agent personas, and dashboard preferences.</p>
           </div>
           <button
             type="button"

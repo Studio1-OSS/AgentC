@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChatItem } from "@/lib/session";
 import { buildConversation, type TurnTiming } from "@/lib/conversation";
 
-const agent = { variant: "blue" as const, name: "Cloud Agent", role: "Full-Stack Engineer" };
+const agent = { variant: "blue" as const, name: "AgentC", role: "Full-Stack Engineer" };
 
 describe("buildConversation", () => {
   const items: ChatItem[] = [

@@ -7,7 +7,7 @@ import {
   NEBIUS_PROVIDER_ID,
   buildNebiusPiProviderRegistration,
   resolveLlmProviderConfig,
-} from "@cloud-agent/protocol";
+} from "@agentc/protocol";
 
 const llm = resolveLlmProviderConfig(process.env);
 console.log("llm", { providerId: llm.providerId, modelId: llm.modelId, baseUrl: llm.baseUrl });

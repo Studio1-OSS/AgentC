@@ -1,11 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { DEFAULT_WEB_PREVIEW_PORT, webPreviewConfigPath, WebPreviewSchema } from "@cloud-agent/protocol";
+import { DEFAULT_WEB_PREVIEW_PORT, webPreviewConfigPath, WebPreviewSchema } from "@agentc/protocol";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 
 export function previewSystemPrompt(port = DEFAULT_WEB_PREVIEW_PORT): string {
   return `You run on the app server. All repository files and tools run in a remote Daytona sandbox. Complete the user's request with minimal interruptions and concise progress updates.
 Whenever you create or update a runnable website, app, or visual artifact, automatically start it in the background on 0.0.0.0:${port}, call the preview tool, fix any readiness or hostname errors, and include the verified Daytona HTTPS URL as a Markdown link in your final reply. Do this without waiting for the user to ask for a preview.
-For static HTML or visual artifacts, use the installed Python standard-library server: nohup python3 -m http.server ${port} --bind 0.0.0.0 </dev/null >/tmp/cloud-agent-web-${port}.log 2>&1 & echo $!. Avoid npx serve for static pages: it may wait for installation or network access. For Vite, use --host 0.0.0.0 --port ${port} --strictPort and allow the Daytona preview proxy domain from ${webPreviewConfigPath(port)}. This port belongs to the current project; do not use another project's port.
+For static HTML or visual artifacts, use the installed Python standard-library server: nohup python3 -m http.server ${port} --bind 0.0.0.0 </dev/null >/tmp/agentc-web-${port}.log 2>&1 & echo $!. Avoid npx serve for static pages: it may wait for installation or network access. For Vite, use --host 0.0.0.0 --port ${port} --strictPort and allow the Daytona preview proxy domain from ${webPreviewConfigPath(port)}. This port belongs to the current project; do not use another project's port.
 Detach all long-lived servers with nohup, redirect stdin, stdout, and stderr, and record the returned PID. Never use pkill -f to stop a server: it can stop unrelated project servers. Reuse a healthy server or stop only its recorded PID with kill <pid>. Complete file writes and server startup before checking the preview.
 Never present localhost, 127.0.0.1, 0.0.0.0, or an invented URL as a link the user can open. Read the current link through the preview tool rather than reusing an old signed URL. Keep the server running after your reply. If a preview cannot be made ready, explain the specific blocker and do not claim it works.
 For work without a browser view, report the completed result and relevant checks. Lead final replies with the outcome and, when available, the preview link.`;

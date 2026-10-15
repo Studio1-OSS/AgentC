@@ -1,5 +1,5 @@
 {
-  "name": "@cloud-agent/database",
+  "name": "@agentc/database",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
-    "@cloud-agent/protocol": "workspace:*",
+    "@agentc/protocol": "workspace:*",
     "drizzle-orm": "^0.44.5",
     "better-sqlite3": "^12.2.0"
   },

@@ -2,7 +2,7 @@ import type { Server as HttpServer, IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer } from "ws";
 import type { EnvironmentService } from "./services/environments.js";
-import { handleSessionSocket } from "@cloud-agent/agent-runtime";
+import { handleSessionSocket } from "@agentc/agent-runtime";
 import { verifyUiToken } from "./ui-tokens.js";
 
 /**

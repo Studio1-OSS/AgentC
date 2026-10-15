@@ -131,7 +131,7 @@ if (existsSync(webIndex)) {
 } else {
   app.get("/ui", (c) =>
     c.text(
-      "Web UI not built yet. Run: pnpm --filter @cloud-agent/web build",
+      "Web UI not built yet. Run: pnpm --filter @agentc/web build",
       503,
     ),
   );

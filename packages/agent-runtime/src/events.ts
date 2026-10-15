@@ -1,5 +1,5 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import type { ServerEvent } from "@cloud-agent/protocol";
+import type { ServerEvent } from "@agentc/protocol";
 
 export function mapPiEvent(event: AgentSessionEvent): ServerEvent[] {
   switch (event.type) {

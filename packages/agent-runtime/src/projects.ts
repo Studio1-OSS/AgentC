@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { DEFAULT_WEB_PREVIEW_PORT, ProjectIdSchema } from "@cloud-agent/protocol";
+import { DEFAULT_WEB_PREVIEW_PORT, ProjectIdSchema } from "@agentc/protocol";
 import { PiSessionRegistry, type RuntimeConfig } from "./pi.js";
 
 export class ProjectRegistries {

@@ -1,4 +1,4 @@
-import type { LlmProviderConfig } from "@cloud-agent/protocol";
+import type { LlmProviderConfig } from "@agentc/protocol";
 
 const MAX_TITLE_LENGTH = 48;
 const TITLE_PROMPT =

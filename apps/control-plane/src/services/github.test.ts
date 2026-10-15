@@ -5,7 +5,7 @@ import { GitHubApp, TokenCipher, parseGitHubRepo } from "./github.js";
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const config = {
   appId: "123",
-  slug: "cloud-agent-test",
+  slug: "agentc-test",
   clientId: "Iv1.client",
   clientSecret: "secret",
   privateKey: privateKey.export({ type: "pkcs1", format: "pem" }).toString(),
@@ -17,7 +17,7 @@ function json(body: unknown, status = 200) {
 
 describe("parseGitHubRepo", () => {
   it("reads owner and repo from github.com URLs only", () => {
-    expect(parseGitHubRepo("https://github.com/Studio1-OSS/cloud-agent")).toEqual({ owner: "Studio1-OSS", repo: "cloud-agent" });
+    expect(parseGitHubRepo("https://github.com/Studio1-OSS/agentc")).toEqual({ owner: "Studio1-OSS", repo: "agentc" });
     expect(parseGitHubRepo("https://github.com/a/b.git")).toEqual({ owner: "a", repo: "b" });
     expect(parseGitHubRepo("https://gitlab.com/a/b")).toBeNull();
     expect(parseGitHubRepo("https://github.com/only-owner")).toBeNull();

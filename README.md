@@ -1,4 +1,4 @@
-# cloud-agent
+# agentc
 
 [Pi](https://github.com/badlogic/pi-mono) runs on your app server using [Nebius Token Factory](https://docs.tokenfactory.nebius.com/). [Daytona](https://www.daytona.io) sandboxes run repository clones, file operations, shell commands, and the websites the agent creates.
 
@@ -25,14 +25,14 @@ When an existing environment first opens, the server imports its former sandbox 
 ## Deploy on Railway
 
 1. Create a Railway service from this repository. The root `Dockerfile` builds the UI and server; `railway.json` sets `/health` as the health check. Railway supplies `PORT`; the server binds to `0.0.0.0`.
-2. Attach a [Railway volume](https://docs.railway.com/volumes) at `/data`. The app uses `RAILWAY_VOLUME_MOUNT_PATH` to default SQLite to `/data/cloud-agent.db` and Pi storage to `/data/pi`. Use one service replica because both SQLite and the live Pi registries belong to one process.
+2. Attach a [Railway volume](https://docs.railway.com/volumes) at `/data`. The app uses `RAILWAY_VOLUME_MOUNT_PATH` to default SQLite to `/data/agentc.db` and Pi storage to `/data/pi`. Use one service replica because both SQLite and the live Pi registries belong to one process.
 3. Set these Railway variables:
 
    ```env
    DAYTONA_API_KEY=...
    NEBIUS_API_KEY=...
    PI_PROVIDER=nebius
-   PI_MODEL=moonshotai/Kimi-K2.7-Code
+   PI_MODEL=meta-models/muse-spark-open
    CONTROL_PLANE_API_KEY=...
    BROWSER_SESSION_SECRET=...
    ```
@@ -56,7 +56,7 @@ pnpm build
 pnpm start
 ```
 
-Open `http://127.0.0.1:8787/ui/`. `.env` loads from the repository root; process environment variables take precedence. Local storage defaults to `data/cloud-agent.db` and `data/pi` in this repo.
+Open `http://127.0.0.1:8787/ui/`. `.env` loads from the repository root; process environment variables take precedence. Local storage defaults to `data/agentc.db` and `data/pi` in this repo.
 
 | Variable | Purpose |
 | --- | --- |
@@ -74,7 +74,7 @@ Open `http://127.0.0.1:8787/ui/`. `.env` loads from the repository root; process
 | `NEBIUS_API_KEY`, `NEBIUS_BASE_URL` | Nebius credentials and endpoint, used on the app server |
 | `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL` | Optional alternate provider and free-model fallback |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Optional alternate providers |
-| `CLOUD_AGENT_URL`, `CLOUD_AGENT_USER_ID` | CLI server URL and user id |
+| `AGENTC_URL`, `AGENTC_USER_ID` | CLI server URL and user id |
 
 For frontend development, run `pnpm dev:control-plane` and `pnpm dev:web` in separate terminals. Vite serves `http://localhost:5173/ui/` and proxies the API and WebSockets to the control plane.
 
@@ -95,9 +95,9 @@ Browser ownership uses a signed HttpOnly guest cookie lasting 30 days. Clearing 
 The HTTP API uses `Authorization: Bearer <CONTROL_PLANE_API_KEY>` and an optional `X-User-Id`; treat the API key as an admin credential. The API does not apply the browser workspace cap.
 
 ```bash
-pnpm cloud-agent -- --help
-pnpm cloud-agent -- create --repo https://github.com/octocat/Hello-World.git
-pnpm cloud-agent -- list
+pnpm agentc -- --help
+pnpm agentc -- create --repo https://github.com/octocat/Hello-World.git
+pnpm agentc -- list
 ```
 
 A self-hosted HTTPS reverse proxy must preserve the public `Host`, set `X-Forwarded-Proto`, and forward WebSocket upgrades for `/ui/ws`. Browser mutation requests require matching `Origin` and `Host` names.

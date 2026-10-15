@@ -12,7 +12,7 @@ export interface CloudAgentMeta {
 export const CLOUD_AGENTS: CloudAgentMeta[] = [
   {
     id: "cloud",
-    name: "Cloud Agent",
+    name: "AgentC",
     role: "Full-Stack & PR Specialist",
     labelColor: "text-blue-600",
   },
@@ -160,7 +160,7 @@ export function CloudAgentItem({
 }
 
 /* -------------------------------------------------------------
-   1. BLUE CLOUD (Cloud Agent · Classic Cumulus)
+   1. BLUE CLOUD (AgentC · Classic Cumulus)
 ------------------------------------------------------------- */
 function BlueCloudSvg({
   uid,

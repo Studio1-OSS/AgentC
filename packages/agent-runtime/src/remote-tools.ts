@@ -8,7 +8,7 @@ import {
   type BashOperations,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { shellQuote, type SandboxClient } from "@cloud-agent/sandbox-client";
+import { shellQuote, type SandboxClient } from "@agentc/sandbox-client";
 import { createSandboxBashTool } from "./bash.js";
 import { createPreviewTool } from "./preview.js";
 

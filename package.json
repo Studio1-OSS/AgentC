@@ -1,5 +1,5 @@
 {
-  "name": "cloud-agent",
+  "name": "agentc",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.0",
@@ -7,15 +7,15 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "pnpm -r --filter \"!cloud-agent\" run build",
-    "dev:control-plane": "pnpm --filter @cloud-agent/control-plane dev",
-    "dev:web": "pnpm --filter @cloud-agent/web dev",
-    "db:generate": "pnpm --filter @cloud-agent/database generate",
-    "db:migrate": "pnpm --filter @cloud-agent/database migrate",
-    "typecheck": "pnpm -r --filter \"!cloud-agent\" run typecheck",
-    "test": "pnpm --filter @cloud-agent/protocol test && pnpm --filter @cloud-agent/control-plane test && pnpm --filter @cloud-agent/web test && pnpm --filter @cloud-agent/agent-runtime test",
-    "spike": "pnpm --filter @cloud-agent/control-plane spike",
-    "cloud-agent": "pnpm --filter @cloud-agent/cli start",
+    "build": "pnpm -r --filter \"!agentc\" run build",
+    "dev:control-plane": "pnpm --filter @agentc/control-plane dev",
+    "dev:web": "pnpm --filter @agentc/web dev",
+    "db:generate": "pnpm --filter @agentc/database generate",
+    "db:migrate": "pnpm --filter @agentc/database migrate",
+    "typecheck": "pnpm -r --filter \"!agentc\" run typecheck",
+    "test": "pnpm --filter @agentc/protocol test && pnpm --filter @agentc/control-plane test && pnpm --filter @agentc/web test && pnpm --filter @agentc/agent-runtime test",
+    "spike": "pnpm --filter @agentc/control-plane spike",
+    "agentc": "pnpm --filter @agentc/cli start",
     "start": "node apps/control-plane/dist/index.js"
   },
   "devDependencies": {

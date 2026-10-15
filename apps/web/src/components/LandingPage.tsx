@@ -99,7 +99,7 @@ export function LandingPage({
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               className="flex items-center gap-2 sm:gap-2.5 text-left text-slate-900 cursor-pointer shrink-0 select-none"
-              aria-label="Cloud Agent Home"
+              aria-label="AgentC Home"
             >
               <span className="sm:hidden flex items-center shrink-0">
                 <AgentLogo size={32} />
@@ -251,7 +251,7 @@ export function LandingPage({
                         }}
                         className="font-medium text-slate-800 hover:text-slate-950 hover:translate-x-0.5 transition-all flex items-center gap-1.5 cursor-pointer text-left"
                       >
-                        <span>Cloud Agent Web</span>
+                        <span>AgentC Web</span>
                       </button>
                     </li>
                     <li>
@@ -262,7 +262,7 @@ export function LandingPage({
                         }}
                         className="font-medium text-slate-800 hover:text-slate-950 hover:translate-x-0.5 transition-all flex items-center gap-1.5 cursor-pointer text-left"
                       >
-                        <span>Cloud Agent Desktop</span>
+                        <span>AgentC Desktop</span>
                         <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 font-semibold border border-slate-200">
                           Beta
                         </span>
@@ -276,7 +276,7 @@ export function LandingPage({
                         }}
                         className="font-medium text-slate-800 hover:text-slate-950 hover:translate-x-0.5 transition-all flex items-center gap-1 cursor-pointer text-left group"
                       >
-                        <span>Cloud Agent CLI</span>
+                        <span>AgentC CLI</span>
                         <ArrowUpRight
                           size={13}
                           className="text-slate-400 group-hover:text-slate-900 transition-colors"
@@ -291,7 +291,7 @@ export function LandingPage({
                         }}
                         className="font-medium text-slate-800 hover:text-slate-950 hover:translate-x-0.5 transition-all flex items-center gap-1 cursor-pointer text-left group"
                       >
-                        <span>@cloudagent Bot</span>
+                        <span>@agentc Bot</span>
                         <ArrowUpRight
                           size={13}
                           className="text-slate-400 group-hover:text-slate-900 transition-colors"
@@ -464,7 +464,7 @@ export function LandingPage({
               {/* Bottom quote banner */}
               <div className="pt-5 border-t border-slate-100 flex items-center justify-between text-[13px] text-slate-500">
                 <p>
-                  Cloud Agent runs in isolated Daytona sandboxes, tests in its own
+                  AgentC runs in isolated Daytona sandboxes, tests in its own
                   environment, and works until the PR is ready to merge.
                 </p>
                 <button
@@ -501,11 +501,11 @@ export function LandingPage({
               "'NB International Pro', 'nbInternationalPro', system-ui, sans-serif",
           }}
         >
-          <span className="block sm:whitespace-nowrap">Meet Cloud Agent.</span>
+          <span className="block sm:whitespace-nowrap">Meet AgentC.</span>
           <span className="block sm:whitespace-nowrap">Your autonomous agent.</span>
         </h1>
 
-        {/* Short, punchy subtitle based on Cloud Agent - exactly like Image 1 */}
+        {/* Short, punchy subtitle based on AgentC - exactly like Image 1 */}
         <p
           className="text-[15px] sm:text-[17px] md:text-[18px] leading-[1.45] text-slate-600 max-w-[560px] mx-auto text-center mb-6 sm:mb-7 md:mb-8 font-normal"
           style={{
@@ -568,7 +568,7 @@ export function LandingPage({
         <div className="max-w-7xl mx-auto flex flex-row items-center justify-between gap-3 text-left">
           {/* Left: Copyright & Privacy Policy */}
           <div className="text-[12px] sm:text-[13px] text-slate-500 font-normal shrink-0 flex items-center gap-1.5 sm:gap-2">
-            <span>© 2026 Cloud Agent Inc.</span>
+            <span>© 2026 AgentC Inc.</span>
             <span className="hidden sm:inline">All rights reserved.</span>
             <span className="text-slate-300">·</span>
             <button
@@ -649,7 +649,7 @@ export function LandingPage({
             </div>
 
             <h3 className="text-[22px] font-bold tracking-tight text-slate-950 mb-1.5">
-              Book a Cloud Agent Demo
+              Book a AgentC Demo
             </h3>
             <p className="text-[14px] text-slate-600 leading-relaxed mb-6">
               Experience autonomous PR workflows, live Daytona sandboxes, and SWE reasoning tailored to your team.
@@ -744,10 +744,10 @@ export function LandingPage({
               </span>
             </div>
             <h3 className="text-[21px] font-bold text-slate-950 mb-1">
-              About Cloud Agent
+              About AgentC
             </h3>
             <p className="text-[14px] text-slate-600 leading-relaxed mb-6">
-              Cloud Agent pairs frontier LLM reasoning with real Linux sandboxes.
+              AgentC pairs frontier LLM reasoning with real Linux sandboxes.
               Instead of mocking responses, agents operate directly inside isolated
               Daytona containers with full tool autonomy.
             </p>
@@ -863,7 +863,7 @@ export function LandingPage({
               Request Early Access
             </h3>
             <p className="text-[14px] text-slate-600 leading-relaxed mb-6">
-              Join the private developer waitlist for alpha access to Cloud Agent
+              Join the private developer waitlist for alpha access to AgentC
               and isolated Daytona sandbox environments.
             </p>
 
@@ -955,10 +955,10 @@ export function LandingPage({
               </span>
             </div>
             <h3 className="text-[21px] font-bold text-slate-950 mb-1">
-              Cloud Agent Documentation
+              AgentC Documentation
             </h3>
             <p className="text-[14px] text-slate-600 leading-relaxed mb-6">
-              Learn how Cloud Agent runs autonomous engineering loops inside Daytona sandboxes.
+              Learn how AgentC runs autonomous engineering loops inside Daytona sandboxes.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6 text-[13.5px]">
@@ -983,7 +983,7 @@ export function LandingPage({
               <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/60 backdrop-blur-sm">
                 <h4 className="font-semibold text-slate-900 mb-1">CLI & API Integration</h4>
                 <p className="text-slate-600 text-[13px]">
-                  Trigger tasks via REST API, webhooks, or the <code>cloudagent</code> CLI tool.
+                  Trigger tasks via REST API, webhooks, or the <code>agentc</code> CLI tool.
                 </p>
               </div>
             </div>
@@ -1031,7 +1031,7 @@ export function LandingPage({
               Customer Stories & Metrics
             </h3>
             <p className="text-[14px] text-slate-600 leading-relaxed mb-6">
-              Engineering teams use Cloud Agent to eliminate backlog churn and ship verified features autonomously.
+              Engineering teams use AgentC to eliminate backlog churn and ship verified features autonomously.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 text-[13.5px]">
@@ -1043,7 +1043,7 @@ export function LandingPage({
                   PR Merging Velocity
                 </h4>
                 <p className="text-slate-600 text-[13px]">
-                  "Instead of engineers context-switching on test regressions, Cloud Agent healed Vitest suites in isolated Daytona sandboxes automatically."
+                  "Instead of engineers context-switching on test regressions, AgentC healed Vitest suites in isolated Daytona sandboxes automatically."
                 </p>
                 <span className="text-[11px] text-slate-400 block mt-2 font-medium">
                   VP of Engineering · HyperScale Inc.
@@ -1296,7 +1296,7 @@ export function LandingPage({
                   Architecture · 5 min read
                 </span>
                 <h4 className="font-bold text-slate-950 text-[14.5px] mb-1">
-                  How Cloud Agent Heals Broken Vitest Suites Inside Daytona Sandboxes
+                  How AgentC Heals Broken Vitest Suites Inside Daytona Sandboxes
                 </h4>
                 <p className="text-slate-600 text-[12.5px]">
                   A walkthrough of how the runner bot diagnoses stack traces, inspects LSP errors, and iterates until all unit tests pass before opening a PR.
@@ -1551,7 +1551,7 @@ export function LandingPage({
             </div>
 
             <div className="text-center pt-3 text-[12px] text-slate-400">
-              © 2026 Cloud Agent Inc. · by Studio1
+              © 2026 AgentC Inc. · by Studio1
             </div>
           </div>
         </div>

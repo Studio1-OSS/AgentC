@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { createAgentSession, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { PiSessionRegistry } from "./pi.js";
-import type { ServerEvent } from "@cloud-agent/protocol";
+import type { ServerEvent } from "@agentc/protocol";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   createAgentSession: vi.fn(),
@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 async function setup() {
-  const dir = mkdtempSync(join(tmpdir(), "cloud-agent-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "agentc-test-"));
   directories.push(dir);
   let listener: (event: AgentSessionEvent) => void = () => {};
   const session = {

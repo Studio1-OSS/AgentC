@@ -16,7 +16,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 let directory: string;
 const createdSessions = new Map<string, { prompt: ReturnType<typeof vi.fn> }>();
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), "cloud-agent-projects-"));
+  directory = mkdtempSync(join(tmpdir(), "agentc-projects-"));
   vi.mocked(ModelRuntime.create).mockResolvedValue({ getModel: () => ({ maxTokens: 8192, contextWindow: 100_000 }), setRuntimeApiKey: vi.fn() } as never);
   vi.mocked(SessionManager.list).mockResolvedValue([]);
   vi.mocked(createAgentSession).mockImplementation(async () => {

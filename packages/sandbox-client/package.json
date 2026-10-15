@@ -1,5 +1,5 @@
 {
-  "name": "@cloud-agent/sandbox-client",
+  "name": "@agentc/sandbox-client",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@cloud-agent/protocol": "workspace:*",
+    "@agentc/protocol": "workspace:*",
     "@daytona/sdk": "^0.222.0",
     "ws": "^8.18.3"
   },

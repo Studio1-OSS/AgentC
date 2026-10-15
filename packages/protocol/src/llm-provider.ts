@@ -6,7 +6,7 @@ export const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3-235b-a22b-2507";
 
 export const DEFAULT_NEBIUS_BASE_URL = "https://api.tokenfactory.nebius.com/v1";
-export const DEFAULT_NEBIUS_MODEL = "moonshotai/Kimi-K2.7-Code";
+export const DEFAULT_NEBIUS_MODEL = "meta-models/muse-spark-open";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5";
 export const DEFAULT_OPENAI_MODEL = "gpt-4.1";
 
@@ -72,8 +72,8 @@ export function resolveLlmProviderConfig(
       api: "openai-completions",
       headers: {
         "HTTP-Referer":
-          env.OPENROUTER_HTTP_REFERER?.trim() || "https://cloud-agent.local",
-        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "cloud-agent",
+          env.OPENROUTER_HTTP_REFERER?.trim() || "https://agentc.local",
+        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "agentc",
       },
     };
   }
@@ -91,8 +91,8 @@ export function resolveLlmProviderConfig(
       api: "openai-completions",
       headers: {
         "HTTP-Referer":
-          env.OPENROUTER_HTTP_REFERER?.trim() || "https://cloud-agent.local",
-        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "cloud-agent",
+          env.OPENROUTER_HTTP_REFERER?.trim() || "https://agentc.local",
+        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "agentc",
       },
     };
   }

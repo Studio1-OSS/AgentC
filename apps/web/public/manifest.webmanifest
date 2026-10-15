@@ -1,6 +1,6 @@
 {
-  "name": "Cloud Agent",
-  "short_name": "Cloud Agent",
+  "name": "AgentC",
+  "short_name": "AgentC",
   "description": "Autonomous AI coding agent that plans, edits, tests and opens pull requests in secure cloud sandboxes.",
   "start_url": "/ui/?view=app",
   "scope": "/ui/",

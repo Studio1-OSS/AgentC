@@ -93,7 +93,7 @@ describe("browser workspace ownership", () => {
     const boot = await app.request(`http://localhost/bootstrap?t=${encodeURIComponent(token)}`);
     expect(boot.status).toBe(200);
     const cookies = boot.headers.getSetCookie();
-    const grantCookie = cookies.find((cookie) => cookie.startsWith("cloud_agent_workspace="))!;
+    const grantCookie = cookies.find((cookie) => cookie.startsWith("agentc_workspace="))!;
     expect(grantCookie).toContain("HttpOnly");
     expect(grantCookie).toContain("Path=/ui");
     expect(grantCookie).toContain("SameSite=Lax");
@@ -124,7 +124,7 @@ describe("browser workspace ownership", () => {
     const { token: expired } = mintUiToken({ userId: "owner", environmentId: "workspace", piSessionId: "pi", secret: "test-secret", ttlMs: -1000 });
     for (const invalid of [expired, `${token}tampered`]) {
       expect((await app.request(`http://localhost/bootstrap?t=${encodeURIComponent(invalid)}`)).status).toBe(401);
-      const response = await app.request("http://localhost/environments", { headers: { cookie: `cloud_agent_workspace=${invalid}` } });
+      const response = await app.request("http://localhost/environments", { headers: { cookie: `agentc_workspace=${invalid}` } });
       expect((await response.json()).environments).toHaveLength(1);
       expect(service.list.mock.calls.at(-1)?.[0]).not.toBe("owner");
     }

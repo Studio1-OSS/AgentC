@@ -11,7 +11,7 @@ import { resolve } from "node:path";
 function siteUrl(): Plugin {
   let isServe = false;
   return {
-    name: "cloud-agent-site-url",
+    name: "agentc-site-url",
     configResolved(config) {
       isServe = config.command === "serve";
     },

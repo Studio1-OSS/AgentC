@@ -11,7 +11,7 @@ import {
   type AppDatabase,
   type EnvironmentRow,
   type ProjectRow,
-} from "@cloud-agent/database";
+} from "@agentc/database";
 import {
   CreateEnvironmentRequestSchema,
   PreviewRequestSchema,
@@ -19,13 +19,13 @@ import {
   SessionRequestSchema,
   DEFAULT_WEB_PREVIEW_PORT,
   type EnvironmentStatus,
-} from "@cloud-agent/protocol";
+} from "@agentc/protocol";
 import {
   createSandboxClientFromEnv,
   shellQuote,
   type SandboxClient,
-} from "@cloud-agent/sandbox-client";
-import { ProjectRegistries, createRuntimeApp, createRemoteTools, loadRemoteAgentsFiles, importSandboxSessions } from "@cloud-agent/agent-runtime";
+} from "@agentc/sandbox-client";
+import { ProjectRegistries, createRuntimeApp, createRemoteTools, loadRemoteAgentsFiles, importSandboxSessions } from "@agentc/agent-runtime";
 import type { AppConfig } from "../config.js";
 import { mintUiToken, verifyUiToken } from "../ui-tokens.js";
 import { titleFromPrompt } from "./titles.js";
@@ -169,8 +169,8 @@ export class EnvironmentService {
     const sandbox = await this.sandboxes.create({
       name: `env-${environmentId.slice(0, 8)}`,
       labels: {
-        "cloud-agent/environment-id": environmentId,
-        "cloud-agent/user-id": row.userId,
+        "agentc/environment-id": environmentId,
+        "agentc/user-id": row.userId,
       },
     });
 
@@ -839,7 +839,7 @@ export class EnvironmentService {
     const [owner, repo] = env.githubRepo.split("/") as [string, string];
     const body = (rawBody ?? {}) as { title?: unknown; body?: unknown; draft?: unknown };
     const title = typeof body.title === "string" && body.title.trim() ? body.title.trim().slice(0, 240) : env.name;
-    const description = typeof body.body === "string" && body.body.trim() ? body.body.trim() : "Opened from Cloud Agent.";
+    const description = typeof body.body === "string" && body.body.trim() ? body.body.trim() : "Opened from AgentC.";
 
     const userToken = await this.githubUserToken(userId);
     const connection = this.githubConnection(userId)!;
@@ -856,8 +856,8 @@ export class EnvironmentService {
 
     // Keep pushing to the agent branch this workspace already opened; otherwise start one.
     let branch = (await run("git rev-parse --abbrev-ref HEAD")).out;
-    if (!branch.startsWith("cloud-agent/")) {
-      branch = `cloud-agent/${slugify(title)}-${randomUUID().slice(0, 6)}`;
+    if (!branch.startsWith("agentc/")) {
+      branch = `agentc/${slugify(title)}-${randomUUID().slice(0, 6)}`;
       const created = await run(`git checkout -b ${shellQuote(branch)}`);
       if (!created.ok) throw new Error(`Could not create branch: ${created.out}`);
     }
